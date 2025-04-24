@@ -258,7 +258,7 @@ start jupyter for network access:
 ## FDM / 3D printing
 
 ### 3D model files:
-- Housing and additional parts (obj and 3mf)  in [mechanical_design/v2/export](mechanical_design/v2/export).
+- ! Housing and additional parts (obj and 3mf)  in [the PiLiDAR-Hardware Repo](https://github.com/PiLiDAR/PiLiDAR-Hardware/tree/main/FDM) !
 
 - M12 to C-Mount lens adapter ([thingiverse.com](https://www.thingiverse.com/thing:4444398))
 
