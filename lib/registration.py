@@ -19,7 +19,7 @@ import time
 try:
     from lib.pointcloud import estimate_point_normals
     from lib.platform_utils import get_platform
-except:
+except ImportError:
     from pointcloud import estimate_point_normals
     from platform_utils import get_platform
 
