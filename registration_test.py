@@ -1,5 +1,5 @@
 from lib.pointcloud import load_pointcloud, save_pointcloud, get_transform_vectors, transform
-from lib.registration import global_registration, icp, color_icp
+from lib.registration import global_registration, icp
 from lib.visualization import visualize
 
 
