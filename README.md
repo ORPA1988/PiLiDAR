@@ -305,35 +305,12 @@ using ~~[_Web Visualizer_](https://www.open3d.org/docs/release/tutorial/visualiz
 Plotly seems to render client-sided, unlike Open3D Web Visualizer which renders host-sided and streams jpg sequences, which strains the Pi's both CPU and WIFI.
 
 
-## Dumping Scans to USB Storage
+## Storing Scans on the Internal SD Card
 
-1. Clone the Repo and run the installer:
-    ```
-    cd /home/pi/PiLiDAR
-    git clone https://github.com/LaserBorg/usb_dump --depth 1
-    cd usb_dump && chmod +x install.sh && ./install.sh "$(pwd)"
-    ```
-2. Create the config file:
-    ```
-    echo '{"source_directories": ["/home/pi/PiLiDAR/scans"], "target_root_directory": null}' > usbdump.json
-    ```
-
-
-### Troubleshoot USB_dump:
--  Check the log file:
-    ```
-    tail -f /tmp/usbdump.log
-    ```
-
-- to uninstall the service, run
-    ```
-    chmod +x uninstall.sh && ./uninstall.sh
-    ```
-
-- if the mount point is still persistend after being removed, just delete them.
-    ```
-    sudo rm -rf /media/pi/<your device name>
-    ```
+All point clouds and images are saved to `~/PiLiDAR/scans` by default.  This
+location resides on the Raspberry Pi's SD card, so no external USB storage is
+required.  To change the destination directory, edit the `SCANS_ROOT` entry in
+`config.json`.
 
 
 ## Troubleshooting
