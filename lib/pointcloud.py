@@ -11,7 +11,7 @@ import pickle
 
 try:
     from lib.imu_orientation import Orientation
-except:
+except ImportError:
     from imu_orientation import Orientation
 
 

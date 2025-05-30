@@ -15,7 +15,7 @@ from typing import Optional
 try:
     from lib.file_utils import make_dir
     from lib.platform_utils import get_platform, allow_serial
-except:
+except ImportError:
     from file_utils import make_dir
     from platform_utils import get_platform, allow_serial
 
@@ -37,7 +37,12 @@ class Config:
         # set scans_root if provided, else use config.json
         if scans_root is not None:
             self.set(scans_root, "SCANS_ROOT")
-        self.scans_root = os.path.join(self.base_dir, self.get("SCANS_ROOT"))
+
+        scans_root = self.get("SCANS_ROOT")
+        if os.path.isabs(scans_root):
+            self.scans_root = scans_root
+        else:
+            self.scans_root = os.path.join(self.base_dir, scans_root)
         
         # write hex strings back to dict:
         protocol = self.dict["LIDAR"]["protocol"]

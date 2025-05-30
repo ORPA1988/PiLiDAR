@@ -16,7 +16,7 @@ def get_platform():
         # print("os.uname():",  os.uname())
 
         if 'linux' in platform:
-            if 'aarch64' in machine:
+            if 'aarch64' in machine or machine.startswith('arm'):
                 platform =  'RaspberryPi'
             else:
                 platform = 'Linux'
@@ -37,8 +37,8 @@ if platform in ['Windows', 'Mac', 'Linux', 'RaspberryPi']:
     import numpy as np
 
 elif platform in ['Pico', 'Pico W', 'Metro M7']:
-    import board                    # type: ignore
-    from ulab import numpy as np    # type: ignore
+    import board                    # type: ignore  # noqa: F401
+    from ulab import numpy as np    # type: ignore  # noqa: F401
     
 
 def boardpin(pin):

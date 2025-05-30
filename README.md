@@ -91,10 +91,8 @@ Scan duration:
 
 
 ### LD06 / STL27L:
-- UART Tx (yellow)
-- PWM (white)
-- GND (black)
-- VCC 5V (red)
+- LD06 uses UART and PWM connections
+- STL27L connects via the Waveshare driver board over USB
 
 ### Raspberry Pi:
 - LD06 UART0 Rx: GP15
@@ -306,6 +304,7 @@ Plotly seems to render client-sided, unlike Open3D Web Visualizer which renders 
 
 
 ## Dumping Scans to USB Storage
+Scans are stored on the SD card in `/home/pi/PiLiDAR/scans`.
 
 1. Clone the Repo and run the installer:
     ```
