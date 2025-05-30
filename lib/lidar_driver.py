@@ -18,16 +18,12 @@ try:
     from lib.config import Config
     from lib.pointcloud import save_raw_scan, get_scan_dict
     from lib.platform_utils import init_serial, init_pwm_Pi  # init_serial_MCU, init_pwm_MCU
-    from lib.file_utils import save_data
-    from lib.config import format_value
 
 # testing from this file
-except:
+except ImportError:
     from config import Config
     from pointcloud import save_raw_scan, get_scan_dict
     from platform_utils import init_serial, init_pwm_Pi  # init_serial_MCU, init_pwm_MCU
-    from file_utils import save_data
-    from config import format_value
 
 
 class Lidar:

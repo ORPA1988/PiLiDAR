@@ -9,7 +9,7 @@
     "ENABLE_VERTEXCOLOUR": true,
     "ENABLE_FILTERING": false,
     
-    "SCANS_ROOT": "scans",
+    "SCANS_ROOT": "/home/pi/PiLiDAR/scans",
     "ANGULAR_DIGITS": 3,
     
     "LIDAR": {
