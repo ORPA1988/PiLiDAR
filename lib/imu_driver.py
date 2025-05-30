@@ -38,7 +38,7 @@ class MPU6050Wrapper:
                         time.sleep(0.02)
                     else:
                         time.sleep(0.01)
-            except OSError as e:
+            except OSError:
                 time.sleep(0.01)
     
     def get_euler_angles(self):

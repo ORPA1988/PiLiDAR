@@ -14,7 +14,7 @@ import numpy as np
 try:
     from lib.pointcloud import transform
     from lib.platform_utils import get_platform
-except:
+except ImportError:
     from pointcloud import transform
     from platform_utils import get_platform
 
