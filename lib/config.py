@@ -15,7 +15,7 @@ from typing import Optional
 try:
     from lib.file_utils import make_dir
     from lib.platform_utils import get_platform, allow_serial
-except:
+except ImportError:
     from file_utils import make_dir
     from platform_utils import get_platform, allow_serial
 

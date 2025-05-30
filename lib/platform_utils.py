@@ -37,8 +37,8 @@ if platform in ['Windows', 'Mac', 'Linux', 'RaspberryPi']:
     import numpy as np
 
 elif platform in ['Pico', 'Pico W', 'Metro M7']:
-    import board                    # type: ignore
-    from ulab import numpy as np    # type: ignore
+    import board                    # type: ignore  # noqa: F401
+    from ulab import numpy as np    # type: ignore  # noqa: F401
     
 
 def boardpin(pin):
