@@ -16,8 +16,8 @@ def get_platform():
         # print("os.uname():",  os.uname())
 
         if 'linux' in platform:
-            if 'aarch64' in machine:
-                platform =  'RaspberryPi'
+            if any(arch in machine for arch in ['aarch64', 'armv7l', 'armv6l']):
+                platform = 'RaspberryPi'
             else:
                 platform = 'Linux'
         elif 'Pico W' in machine:
