@@ -244,7 +244,6 @@ class Lidar:
 
     def pwm_from_speed(self, speed):
         m, b = self.pwm_coeffs
-        self.pwm_coeffs
         return (speed - b) / m
 
 
