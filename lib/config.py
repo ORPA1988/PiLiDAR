@@ -24,6 +24,7 @@ except:
 platform = get_platform()
 if platform == 'RaspberryPi':
     # os.environ['LG_WD'] = '/tmp'  # set LGPIO tmp directory
+    os.environ.setdefault("RPI_LGPIO_REVISION", "0xa020d3")
     import RPi.GPIO as GPIO  # type: ignore
 
 
