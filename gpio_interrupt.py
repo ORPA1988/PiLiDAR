@@ -26,15 +26,13 @@ def start_callback(channel):
             
     # Start a new process with the main script with higher priority
     nice_value = -10
-    call = ["nice", "-n", str(nice_value), "python3", MAIN_SCRIPT] if CONDA_ENV is None else ["nice", "-n", str(nice_value), CONDA_PATH, "run", "-n", CONDA_ENV, "python", MAIN_SCRIPT]
+    call = ["nice", "-n", str(nice_value), "python3", MAIN_SCRIPT]
     process = subprocess.Popen(call)
     print("Started a new process, pid:", process.pid)
 
 
 START_PIN = 17
 
-CONDA_PATH  = "/home/pi/miniforge3/condabin/conda"
-CONDA_ENV   = "py311"
 MAIN_SCRIPT = "/home/pi/PiLiDAR/PiLiDAR.py"
 
 
