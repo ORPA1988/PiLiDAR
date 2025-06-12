@@ -18,7 +18,7 @@ if __name__ == "__main__":
 
     # PROCESS RAW DATA FROM PKL FILE
     pcd = process_raw(config, save=True)
-    
+
     # VISUALIZATION
     if config.platform == 'Windows':
         visualize(pcd, view="front", unlit=True, point_size=1, fullscreen=True)
