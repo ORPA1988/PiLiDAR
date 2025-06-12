@@ -4,7 +4,6 @@
 ## Core Features:
 - **LiDAR**: custom serial driver for LDRobot **STL27L**
     - CRC package integrity check
-    - [Hardware PWM](https://github.com/Pioreactor/rpi_hardware_pwm) calibrated using curve fitting
     - 2D live visualization and export (numpy or CSV)
 
 - **Panorama**: 6K 360° spherical map
@@ -81,7 +80,6 @@ Scan duration:
 
 
 - UART Tx (yellow)
-- PWM (white)
 - GND (black)
 - VCC 5V (red)
 
@@ -180,20 +178,6 @@ then execute the _temporary_ solution from python:
 - If you see `dialout` in the output, you are already a member of the group. If not, run the following command to add your user to the group: `sudo usermod -a -G dialout pi`
 - Run the following command to reload the udev rules: `sudo udevadm control --reload-rules`
 - Unplug and replug the serial device, or reboot the system, to apply the changes.
-
-### Hardware PWM on Raspberry Pi
-enable GPIO_18 (PWM0) and GPIO_19 (PWM1)
-    
-    echo "dtoverlay=pwm-2chan" >> /boot/firmware/config.txt 
-
-check if "pwm_bcm2835" now exists:
-
-    lsmod | grep pwm
-
-Install [RPi Hardware PWM library](https://github.com/Pioreactor/rpi_hardware_pwm):
-
-    pip install rpi-hardware-pwm
-
 
 ### Panorama Stitching
 install Hugin with enblend plugin
@@ -339,7 +323,6 @@ inspirations
 another Lidar implementation in Python
 - [pyLIDAR](https://github.com/Paradoxdruid/pyLIDAR)
 
-hardware PWM using [GPIOZero](https://gpiozero.readthedocs.io/en/stable/migrating_from_rpigpio.html#pwm-pulse-width-modulation)
 
 ICP implementations:
 - Aeva [Doppler-ICP](https://github.com/aevainc/Doppler-ICP/blob/main/README.md)

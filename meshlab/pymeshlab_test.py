@@ -13,7 +13,8 @@ bash PyMeshLab/scripts/Linux/0_setup_env.sh  1_build.sh  2_deploy.sh  make_wheel
 
 import os
 import pytest
-import pymeshlab
+
+pymeshlab = pytest.importorskip("pymeshlab")
 
 compute_poisson = True
 hausdorff_color = False

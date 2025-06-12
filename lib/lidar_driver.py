@@ -1,11 +1,8 @@
+# flake8: noqa
 '''
 LiDAR driver for the LDRobot STL27L (Waveshare)
 
 Sample Rate: 21600 samples/s (1800 packages/s x 12 samples/package)
-
-Speed Control on Raspberry Pi
-- RPi hardware PWM: https://pypi.org/project/rpi-hardware-pwm
-- curve fitting using scipy.optimize.curve_fit
 '''
 
 import numpy as np
@@ -15,7 +12,7 @@ import serial
 try:
     from lib.config import Config
     from lib.pointcloud import save_raw_scan, get_scan_dict
-    from lib.platform_utils import init_serial, init_pwm_Pi
+    from lib.platform_utils import init_serial
     from lib.file_utils import save_data
     from lib.config import format_value
 
@@ -23,7 +20,7 @@ try:
 except:
     from config import Config
     from pointcloud import save_raw_scan, get_scan_dict
-    from platform_utils import init_serial, init_pwm_Pi
+    from platform_utils import init_serial
     from file_utils import save_data
     from config import format_value
 
@@ -81,46 +78,11 @@ class Lidar:
         self.visualization      = visualization
         
 
-        if config.get("LIDAR", "GPIO_SERIAL", "ENABLE"):
-            pwm_channel         = config.get("LIDAR", "GPIO_SERIAL", "PWM_CHANNEL")
-            pwm_freq            = config.get("LIDAR", "GPIO_SERIAL", "PWM_FREQ")
-            self.pwm            = init_pwm_Pi(pwm_channel, frequency = pwm_freq)
-            
-            # from speed curve fitting: (slope m, y-intercept b)
-            self.pwm_coeffs = config.get("LIDAR", config.DEVICE, "PWM_COEFFS")
 
-            self.target_speed = config.get("LIDAR", "TARGET_SPEED")
-            self.pwm_dc     = self.update_speed(self.target_speed)
-
-            self.pwm.start(self.pwm_dc * 100)
-
-        else:
-            self.pwm = None
-
-
-    def update_pwm_dc(self, pwm_dc, update=True):
-        self.pwm_dc = pwm_dc
-        self.pwm.change_duty_cycle(self.pwm_dc * 100)
-
-        # update speed if called directly
-        if update:
-            self.target_speed = self.speed_from_pwm(self.pwm_dc)
-
-        return self.pwm_dc
-
-
-    def update_speed(self, target_speed):
-        self.target_speed = target_speed
-        pwm_dc = self.pwm_from_speed(self.target_speed)
-        self.update_pwm_dc(pwm_dc, update=False)
-        return pwm_dc
+        self.pwm = None
     
 
     def close(self):
-        if self.pwm is not None:
-            self.pwm.stop()
-            print("PWM stopped.\n")
-
         if self.visualization is not None:
             self.visualization.close()
             print("Visualization closed.\n")
@@ -236,15 +198,6 @@ class Lidar:
             self.distance_package[counter] = int.from_bytes(byte_array[6 + i:8 + i][::-1], 'big')  # mm units
             self.luminance_package[counter] = byte_array[8 + i]
 
-
-    def speed_from_pwm(self, pwm):
-        m, b = self.pwm_coeffs
-        return m * pwm + b
-
-
-    def pwm_from_speed(self, speed):
-        m, b = self.pwm_coeffs
-        return (speed - b) / m
 
 
     @staticmethod

@@ -46,10 +46,16 @@ def init_serial(port='/dev/ttyUSB0', baudrate=230400):
     )
 
 
-def init_pwm_Pi(pwm_channel=0, frequency=30000):
-    '''pwm_channel 0: GP18, pwm_channel 1: GP19'''
-    from rpi_hardware_pwm import HardwarePWM   # type: ignore
-    return HardwarePWM(pwm_channel=pwm_channel, hz=frequency, chip=0)
+
+def allow_serial():
+    """Try to set read/write permissions for common serial ports."""
+    for dev in ("/dev/ttyUSB0", "/dev/ttyS0", "/dev/serial0"):
+        if os.path.exists(dev):
+            try:
+                os.chmod(dev, 0o666)
+            except PermissionError:
+                print(f"Permission denied when changing permissions for {dev}")
+
 
 
 def allow_serial():

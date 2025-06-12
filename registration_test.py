@@ -1,3 +1,10 @@
+# flake8: noqa
+import pytest
+try:
+    import open3d as o3d
+except ModuleNotFoundError:
+    pytest.skip("open3d not installed", allow_module_level=True)
+
 from lib.pointcloud import load_pointcloud, save_pointcloud, get_transform_vectors, transform
 from lib.registration import global_registration, icp, color_icp
 from lib.visualization import visualize

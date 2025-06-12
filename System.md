@@ -22,7 +22,7 @@ Lädt Einstellungen aus `config.json` und erzeugt Pfade für neue Scans. Enthäl
 Steuert den A4988‑Treiber für den Schrittmotor. Unterstützt Mikro­schrittbetrieb und Berechnung der aktuellen Winkelposition.
 
 ### `lidar_driver.py`
-Kommuniziert über die serielle Schnittstelle mit dem STL27L‑Sensor. Die Rohpakete werden dekodiert und optional per PWM gesteuerte Motordrehzahl geregelt.
+Kommuniziert über die serielle Schnittstelle mit dem STL27L‑Sensor. Die Rohpakete werden dekodiert und als 2D‑Punkte ausgegeben.
 
 ### `pointcloud.py`
 Enthält Funktionen zum Zusammenfügen der 2D‑Messpunkte zu einer 3D‑Punktwolke sowie zum Speichern und Laden der Rohdaten.
