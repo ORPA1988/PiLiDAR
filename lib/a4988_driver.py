@@ -6,6 +6,9 @@ microstepping:
 https://i.stack.imgur.com/vN7JL.png
 '''
 
+import os
+# allow running on non-Pi systems when rpi-lgpio is installed
+os.environ.setdefault("RPI_LGPIO_REVISION", "0xa020d3")
 import RPi.GPIO as GPIO     # type: ignore
 from time import sleep
 

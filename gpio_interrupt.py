@@ -4,6 +4,8 @@ import time
 # import os
 # os.environ['LG_WD'] = '/tmp'  # export LG_WD=/tmp  # set LGPIO tmp directory
 
+import os
+os.environ.setdefault("RPI_LGPIO_REVISION", "0xa020d3")
 import RPi.GPIO as GPIO  # type: ignore
 
 
