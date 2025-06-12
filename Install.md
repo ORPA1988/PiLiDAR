@@ -36,6 +36,9 @@ source venv/bin/activate
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
+# Falls die Installation von `open3d` fehlschlägt, kann stattdessen das
+# vorgebaute Rad `open3d-cpu` verwendet werden:
+# `pip install open3d-cpu`
 ```
 
 ## Programm starten

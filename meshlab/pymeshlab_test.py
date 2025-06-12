@@ -1,3 +1,4 @@
+# flake8: noqa
 '''
 https://pymeshlab.readthedocs.io/en/latest/
 
@@ -10,6 +11,8 @@ git pull https://github.com/cnr-isti-vclab/PyMeshLab.git
 bash PyMeshLab/scripts/Linux/0_setup_env.sh  1_build.sh  2_deploy.sh  make_wheel.sh
 '''
 
+import os
+import pytest
 import pymeshlab
 
 compute_poisson = True
@@ -24,8 +27,12 @@ ms = pymeshlab.MeshSet()
 
 # Load project and pointcloud
 print("loading project file")
-ms.load_project('meshlab/box/box.mlp')
-ms.load_new_mesh('meshlab/pointcloud.ply')
+project = 'meshlab/box.mlp'
+pc = 'meshlab/pointcloud.ply'
+if not (os.path.exists(project) and os.path.exists(pc)):
+    pytest.skip("sample meshlab files missing", allow_module_level=True)
+ms.load_project(project)
+ms.load_new_mesh(pc)
 
 # Simplify the point cloud, apply normal smoothing and create Poisson Surface mesh 
 if compute_poisson:
