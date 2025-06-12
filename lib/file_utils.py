@@ -45,21 +45,26 @@ def csv_from_npy_dir(dir):
 
 def list_files(dir, ext=None, filter=None, recursive=False):
     # from glob import glob
-    # return sorted(glob(os.path.join(dir, '*.'+ext)))
+    # return sorted(glob(os.path.join(dir, "*."+ext)))
 
-    filepaths = list()
+    filepaths = []
+    total_files = 0
+
     for root, dirs, files in os.walk(dir, topdown=True):
         files = sorted(files)
+        total_files += len(files)
 
         for file in files:
             if filter is None or filter in file:
-                if ext is None or os.path.splitext(file)[1][1:] == ext:  # [1:] just removes the dot in ".jpg"
+                if ext is None or os.path.splitext(file)[1][1:] == ext:
                     filepath = os.path.join(root, file)
                     filepaths.append(filepath)
-            
+
         if not recursive:
             break
-    print(f"found: {len(filepaths)} {ext} files ({len(files)-len(filepaths)} other)")
+
+    other_count = total_files - len(filepaths)
+    print(f"found: {len(filepaths)} {ext} files ({other_count} other)")
     return filepaths
 
 def make_dir(dir):
