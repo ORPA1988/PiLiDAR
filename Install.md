@@ -1,0 +1,50 @@
+# Installation auf dem Raspberry Pi 5
+
+Diese Anleitung beschreibt die Einrichtung von PiLiDAR auf einem Raspberry Pi 5 mit PiOS 64bit.
+
+## Voraussetzungen
+* Raspberry Pi 5 (64bit PiOS)
+* Internetzugang
+* Benutzer mit sudo‑Rechten
+
+## System aktualisieren
+```bash
+sudo apt update
+sudo apt upgrade -y
+```
+
+## Benötigte Pakete installieren
+```bash
+sudo apt install -y git python3 python3-pip python3-venv \
+    libatlas-base-dev libopenblas-dev liblapack-dev libhdf5-dev \
+    rpi-lgpio
+```
+
+## Projekt herunterladen
+```bash
+git clone https://github.com/ORPA1988/PiLiDAR.git
+cd PiLiDAR
+```
+
+## Virtuelle Umgebung erstellen
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+## Python-Abhängigkeiten installieren
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+## Programm starten
+```bash
+python PiLiDAR.py
+```
+
+Zum erneuten Aktivieren der Umgebung nach einem Neustart:
+```bash
+cd ~/PiLiDAR
+source venv/bin/activate
+```

@@ -3,7 +3,6 @@ import os
 
 from lib.lidar_driver import Lidar
 from lib.a4988_driver import A4988
-from lib.imu_driver import MPU6050Wrapper
 from lib.config import Config, format_value
 from lib.pointcloud import process_raw, save_raw_scan, get_scan_dict
 from lib.rpicam_utils import take_HDR_photo, estimate_camera_parameters  #, take_photo
@@ -24,12 +23,6 @@ config.init()
 
 enable_cam   = config.get("ENABLE_CAM")
 enable_lidar = config.get("ENABLE_LIDAR")
-enable_IMU   = config.get("ENABLE_IMU")
-
-# initialize IMU
-if enable_IMU:
-    imu = MPU6050Wrapper(config.get("IMU", "i2c_bus"), config.get("IMU", "device_address"), config.get("IMU", "frequency"))
-    quat_list = []
 
 
 # initialize stepper
@@ -59,11 +52,6 @@ if enable_lidar:
         #            awbgains=current_awbgains,
         #            denoise="cdn_fast")
 
-        if enable_IMU:
-            # euler = imu.get_euler_angles()
-            # print(f'{format_value(lidar.z_angle, 2)} | Euler: x {format_value(euler.x, 2)} y {format_value(euler.y, 2)} z {format_value(euler.z, 2)}')
-            quat_values = imu.get_quat_values()
-            quat_list.append(quat_values)  # [lidar.z_angle, *quat_values]
             
     if not enable_cam:
         # wait for lidar to lock rotational speed
@@ -86,9 +74,6 @@ try:
             print(f"\nTaking photo {i+1}/{IMGCOUNT} | Angle: {formatted_angle}")            
             imgpath = os.path.join(config.img_dir, f"image_{formatted_angle}.jpg")
             
-            if enable_IMU:
-                euler = imu.get_euler_angles()
-                print(f'\tEuler: x {format_value(euler.x, 2)} y {format_value(euler.y, 2)} z {format_value(euler.z, 2)}')
 
             # take HDR photo
             imgpaths = take_HDR_photo(AEB           = config.get("CAM", "AEB"), 
@@ -124,9 +109,6 @@ try:
         # Save raw_scan to pickle file
         raw_scan = get_scan_dict(lidar.z_angles, cartesian_list=lidar.cartesian_list)
 
-        if enable_IMU:
-            # inject IMU data into raw_scan dict
-            raw_scan["quaternions"] = quat_list
 
         save_raw_scan(lidar.raw_path, raw_scan)
     
@@ -136,8 +118,6 @@ finally:
     if enable_lidar:
         lidar.close()
 
-        if enable_IMU:
-            imu.close()
 
     stepper.close()
 

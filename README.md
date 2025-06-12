@@ -2,7 +2,7 @@
 ## _WORK IN PROGRESS_
 
 ## Core Features:
-- **LiDAR**: custom serial driver for LDRobot **LD06**, **LD19** or **STL27L**
+- **LiDAR**: custom serial driver for LDRobot **STL27L**
     - CRC package integrity check
     - [Hardware PWM](https://github.com/Pioreactor/rpi_hardware_pwm) calibrated using curve fitting
     - 2D live visualization and export (numpy or CSV)
@@ -33,7 +33,7 @@ klick the images to open the pointclouds in Sketchfab.
 
 ## Hardware Specs:
 
-- LDRobot LD06, LD19 or STL27L LiDAR
+- LDRobot STL27L LiDAR
 - Raspberry Pi HQ Camera with ArduCam M12 Lens [(M25156H18, p.7)](https://www.arducam.com/doc/Arducam_M12_Lens_Kit_for_Pi_HQ_Camera.pdf)
 - Raspberry Pi 4
 - NEMA17 42-23 stepper with A4988 driver
@@ -60,17 +60,7 @@ klick the images to open the pointclouds in Sketchfab.
 
 ### LDRobot LiDAR Specs
 
-![LD06 vs. STL27L](images/lidar_comparison.jpg)
-*angular resolution of LD06 (left) vs. STL27L (right)*
 
-LD06: 
-- sampling frequency: 4500 Hz
-- baudrate 230400
-- [Sales page](https://www.inno-maker.com/product/lidar-ld06/)
-- [mechanical Datasheet](https://www.inno-maker.com/wp-content/uploads/2020/11/LDROBOT_LD06_Datasheet.pdf)
-- [Protocol Description](https://storage.googleapis.com/mauser-public-images/prod_description_document/2021/315/8fcea7f5d479f4f4b71316d80b77ff45_096-6212_a.pdf)
-
-STL27L:
 - sampling frequency: 21600 Hz
 - baudrate 921600
 - [datasheet](https://github.com/May-DFRobot/DFRobot/blob/master/SEN0589_Datasheet.pdf)
@@ -90,15 +80,12 @@ Scan duration:
 *Breadboard Rev. 2*
 
 
-### LD06 / STL27L:
 - UART Tx (yellow)
 - PWM (white)
 - GND (black)
 - VCC 5V (red)
 
 ### Raspberry Pi:
-- LD06 UART0 Rx: GP15
-- LD06 PWM0: GP18
 - Power Button: GP03
 - Scan Button: GP17
 - A4988 direction: GP26, step: GP19
@@ -119,24 +106,6 @@ Scan duration:
         sudo nano /etc/systemd/logind.conf
         HandlePowerKey=poweroff
 
-### enable i2c-GPIO for GY-521 Accelerometer
-
-GY-521 (MPU 6060): Accelerometer, Gyroscope and thermometer  
-i2c adress: 0x68  
-![GY-521](https://www.makershop.de/download/MPU6050-Pinout.png)
-
-Since GPIO3 is hardwired to the Power Button, we need to use i2c-GPIO to map custom i2c pins ([tutorial](https://www.instructables.com/Raspberry-PI-Multiple-I2c-Devices/)). Unlike serial is not getting crossed, so we connect SDA-SDA and SCL-SCL.  
-SDA: GPIO22  
-SCL: GPIO27  
-
-disable ic2_arm and enable i2c-gpio in /boot/firmware/config.txt
-
-    dtparam=i2c_arm=off
-    dtoverlay=i2c-gpio,bus=3,i2c_gpio_delay_us=1,i2c_gpio_sda=22,i2c_gpio_scl=27
-
-search for devices on i2c bus 3:
-
-    sudo i2cdetect -y 3
 
 ### Power LED and CPU fan
 
@@ -249,10 +218,11 @@ powering Raspberry Pi's USB-3-Ports (Hub 2) off / on
     sudo uhubctl -l 2 -a on
 
 
-### jupyter over remote-ssh 
-start jupyter for network access:
+### jupyter über remote-ssh
+Starte Jupyter ohne Token oder Passwort:
 
-    jupyter notebook --ip 192.168.1.16 --no-browser PiLiDAR.ipynb
+    jupyter notebook --ip 0.0.0.0 --no-browser \
+        --NotebookApp.token='' --NotebookApp.password='' PiLiDAR.ipynb
 
 
 ## FDM / 3D printing
@@ -272,30 +242,6 @@ start jupyter for network access:
 
 ![3D printing](images/FDM.jpg)
 *FDM printing the old front panel (Rev. 1) in PETG*
-
-
-## Serial Protocol
-### LD06
-baudrate 230400, data bits 8, no parity, 1 stopbit  
-sampling frequency 4500 Hz, scan frequency 5-13 Hz, distance 2cm - 12 meter, ambient light 30 kLux
-
-total package size: 48 Byte, big endian.
-- starting character：Length 1 Byte, fixed value 0x54, means the beginning of data packet;
-- Data Length: Length 1 Byte, the first three digits reserved, the last five digits represent the number of measured points in a packet, currently fixed value 12;
-- speed：Length 2 Byte, in degrees per second;
-- Start angle: Length: 2 Byte; unit: 0.01 degree;
-- Data: Length 36 Byte; containing 12 data points with 3 Byte each: 2 Byte distance (unit: 1 mm), 1 Byte luminance. For white objects within 6m, the typical luminance is around 200.
-- End Angle: Length: 2 Byte; unit: 0.01 degree；
-- Timestamp: Length 2 Bytes in ms, recount if reaching to MAX 30000；
-- CRC check: Length 1 Byte
-
-The Angle value of each data point is obtained by linear interpolation of the starting angle and the ending angle.  
-The calculation method of the angle is as following:
-
-    step = (end_angle – start_angle)/(len – 1)  
-    angle = start_angle + step*i  
-
-len is the length of the packet, and the i value range is [0, len].
 
 
 ## remote Open3D Visualization
@@ -388,7 +334,6 @@ add entry to wpa_supplicant.conf
 ## references:
 
 inspirations
-- [LIDAR_LD06_python_loder](https://github.com/henjin0/LIDAR_LD06_python_loder) and [Lidar_LD06_for_Arduino](https://github.com/henjin0/Lidar_LD06_for_Arduino) by Inoue Minoru ("[henjin0](https://github.com/henjin0)")
 - [ShaunPrice's](https://github.com/ShaunPrice/360-camera) StereoPi-supporting fork of [BrianBock's](https://github.com/BrianBock/360-camera) 360-camera script (Article on [Medium](https://medium.com/stereopi/stitching-360-panorama-with-raspberry-pi-cm3-stereopi-and-two-fisheye-cameras-step-by-step-guide-aeca3ff35871))
 
 another Lidar implementation in Python

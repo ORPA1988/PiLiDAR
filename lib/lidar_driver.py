@@ -1,9 +1,7 @@
 '''
-LiDAR driver for LDRobot LD06 and STL27L (Waveshare)
+LiDAR driver for the LDRobot STL27L (Waveshare)
 
-Sample Rates:
-LD06:    4500 samples/s  (375 packages/s x 12 samples/package)
-STL27L: 21600 samples/s (1800 packages/s x 12 samples/package)
+Sample Rate: 21600 samples/s (1800 packages/s x 12 samples/package)
 
 Speed Control on Raspberry Pi
 - RPi hardware PWM: https://pypi.org/project/rpi-hardware-pwm
@@ -17,7 +15,7 @@ import serial
 try:
     from lib.config import Config
     from lib.pointcloud import save_raw_scan, get_scan_dict
-    from lib.platform_utils import init_serial, init_pwm_Pi  # init_serial_MCU, init_pwm_MCU
+    from lib.platform_utils import init_serial, init_pwm_Pi
     from lib.file_utils import save_data
     from lib.config import format_value
 
@@ -25,7 +23,7 @@ try:
 except:
     from config import Config
     from pointcloud import save_raw_scan, get_scan_dict
-    from platform_utils import init_serial, init_pwm_Pi  # init_serial_MCU, init_pwm_MCU
+    from platform_utils import init_serial, init_pwm_Pi
     from file_utils import save_data
     from config import format_value
 
@@ -52,9 +50,6 @@ class Lidar:
         # dmesg | grep "tty"
         self.port               = config.PORT
         
-        # if self.platform in ['Pico', 'Pico W', 'Metro M7']:
-        #     self.serial_connection  = init_serial_MCU(pin=self.port, baudrate=baudrate)
-        # else:  # self.platform in ['Windows', 'Linux', 'RaspberryPi']:
         self.serial_connection  = init_serial(port=self.port, baudrate=config.get("LIDAR", config.DEVICE, "BAUDRATE"))
         
 
@@ -99,10 +94,6 @@ class Lidar:
 
             self.pwm.start(self.pwm_dc * 100)
 
-        # elif self.platform in ['Pico', 'Pico W', 'Metro M7']:
-        #     pwm_pin             = "GP2"
-        #     self.pwm            = init_pwm_MCU(pwm_pin, frequency=pwm_frequency)
-        #     self.pwm.duty_cycle = int(pwm_dc * 65534)
         else:
             self.pwm = None
 
@@ -292,8 +283,7 @@ if __name__ == "__main__":
     
     config = Config()
     
-    # use LD06 or STL27L
-    config.set_device("LD06")
+
     
     config.init(scan_id="_")
     visualize = True
