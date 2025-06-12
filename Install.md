@@ -20,6 +20,14 @@ sudo apt install -y git python3 python3-pip python3-venv \
     rpi-lgpio
 ```
 
+Falls `python3-rpi.gpio` bereits installiert ist, sollte es entfernt und
+durch `python3-rpi-lgpio` ersetzt werden:
+
+```bash
+sudo apt remove python3-rpi.gpio
+sudo apt install python3-rpi-lgpio
+```
+
 ## Projekt herunterladen
 ```bash
 git clone https://github.com/ORPA1988/PiLiDAR.git
@@ -50,4 +58,43 @@ Zum erneuten Aktivieren der Umgebung nach einem Neustart:
 ```bash
 cd ~/PiLiDAR
 source venv/bin/activate
+```
+
+## Autostart von `gpio_interrupt`
+Mache das Skript ausführbar:
+```bash
+chmod +x gpio_interrupt.py
+```
+
+Erstelle eine neue Systemd‑Service-Datei:
+```bash
+sudo nano /etc/systemd/system/pilidar.service
+```
+Mit folgendem Inhalt:
+```
+[Unit]
+Description=PiLiDAR-Button
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+Environment=LG_WD=/tmp
+ExecStart=/usr/bin/python3 /home/pi/PiLiDAR/gpio_interrupt.py
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Dienst laden und aktivieren:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable pilidar.service
+sudo systemctl start pilidar.service
+```
+
+Status prüfen (optional):
+```bash
+sudo systemctl status pilidar.service
 ```
