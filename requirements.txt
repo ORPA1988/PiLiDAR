@@ -8,9 +8,5 @@ opencv-python>=4.10  # or opencv-headless-python
 pye57>=0.4.12
 exifread>=3.0.0
 jupyter
-
-quat>=1.0.0
-mpu6050>=0.0.3
-
 rpi-lgpio>=0.6
 #rpi-hardware-pwm>=0.2.2
