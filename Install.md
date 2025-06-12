@@ -59,3 +59,42 @@ Zum erneuten Aktivieren der Umgebung nach einem Neustart:
 cd ~/PiLiDAR
 source venv/bin/activate
 ```
+
+## Autostart von `gpio_interrupt`
+Mache das Skript ausführbar:
+```bash
+chmod +x gpio_interrupt.py
+```
+
+Erstelle eine neue Systemd‑Service-Datei:
+```bash
+sudo nano /etc/systemd/system/pilidar.service
+```
+Mit folgendem Inhalt:
+```
+[Unit]
+Description=PiLiDAR-Button
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+Environment=LG_WD=/tmp
+ExecStart=/usr/bin/python3 /home/pi/PiLiDAR/gpio_interrupt.py
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Dienst laden und aktivieren:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable pilidar.service
+sudo systemctl start pilidar.service
+```
+
+Status prüfen (optional):
+```bash
+sudo systemctl status pilidar.service
+```

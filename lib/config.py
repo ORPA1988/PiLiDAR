@@ -71,6 +71,7 @@ class Config:
 
         self.gear_ratio = self.evaluate_formula(self.get("STEPPER", "GEAR_RATIO"))
         self.set(self.gear_ratio, "STEPPER", "GEAR_RATIO")
+        self.validate_stepper_settings()
 
         self.target_res = self.evaluate_formula(self.get("LIDAR", "TARGET_RES"))
         self.update_target_res(self.target_res)
@@ -172,13 +173,40 @@ class Config:
     def evaluate_formula(self, formula: str):
         return eval(formula)
 
+    def validate_stepper_settings(self):
+        microsteps = self.get("STEPPER", "MICROSTEPS")
+        if microsteps not in (1, 2, 4, 8, 16):
+            raise ValueError(f"Invalid MICROSTEPS setting: {microsteps}")
+
+        delay = self.get("STEPPER", "STEP_DELAY")
+        if not (0 < delay <= 0.1):
+            raise ValueError("STEP_DELAY must be between 0 and 0.1 seconds")
+
+        gear_ratio = self.gear_ratio
+        if gear_ratio <= 0:
+            raise ValueError("GEAR_RATIO must be positive")
+
+        stepper_res = self.get("STEPPER", "STEPPER_RES")
+        if stepper_res <= 0:
+            raise ValueError("STEPPER_RES must be positive")
+
     def gpio_setup(self, debug=False):
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(debug)
-        
+
         # power relay
-        relay_pin = self.get("STEPPER", "RELAY_PIN")
-        GPIO.setup(relay_pin, GPIO.OUT)
+        self.relay_pin = self.get("STEPPER", "RELAY_PIN")
+        GPIO.setup(self.relay_pin, GPIO.OUT)
+        GPIO.output(self.relay_pin, GPIO.HIGH)  # enable power
+
+    def relay_on(self):
+        if hasattr(self, "relay_pin"):
+            GPIO.output(self.relay_pin, GPIO.HIGH)
+
+    def relay_off(self):
+        if hasattr(self, "relay_pin"):
+            GPIO.output(self.relay_pin, GPIO.LOW)
+            GPIO.cleanup(self.relay_pin)
 
 
 def format_value(value, digits):

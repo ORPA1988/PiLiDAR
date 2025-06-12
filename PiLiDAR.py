@@ -24,6 +24,7 @@ print(r'''
 
 config = Config()
 config.init()
+config.relay_on()
 
 enable_cam = config.get("ENABLE_CAM")
 enable_lidar = config.get("ENABLE_LIDAR")
@@ -120,7 +121,7 @@ finally:
     if enable_lidar:
         lidar.close()
     stepper.close()
-    ## Relay Power off
+    config.relay_off()
 # STITCHING PROCESS
 if enable_cam:
     print("\nStitching Pano...")
