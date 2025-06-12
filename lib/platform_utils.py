@@ -1,6 +1,5 @@
 import sys
 import os
-import subprocess
 
 
 def get_platform():
@@ -17,7 +16,7 @@ def get_platform():
 
         if 'linux' in platform:
             if 'aarch64' in machine:
-                platform =  'RaspberryPi'
+                platform = 'RaspberryPi'
             else:
                 platform = 'Linux'
         elif 'Pico W' in machine:
@@ -33,18 +32,34 @@ def get_platform():
 
 platform = get_platform()
 
-if platform in ['Windows', 'Mac', 'Linux', 'RaspberryPi']:
-    import numpy as np
 
 def init_serial(port='/dev/ttyUSB0', baudrate=230400):
     ''' USB: "/dev/ttyUSB0"  GPIO: "/dev/ttyS0" '''
     import serial
-    return serial.Serial(port=port, baudrate=baudrate, timeout=1.0, bytesize=8, parity='N', stopbits=1)
+    return serial.Serial(
+        port=port,
+        baudrate=baudrate,
+        timeout=1.0,
+        bytesize=8,
+        parity='N',
+        stopbits=1,
+    )
+
 
 def init_pwm_Pi(pwm_channel=0, frequency=30000):
     '''pwm_channel 0: GP18, pwm_channel 1: GP19'''
     from rpi_hardware_pwm import HardwarePWM   # type: ignore
     return HardwarePWM(pwm_channel=pwm_channel, hz=frequency, chip=0)
+
+
+def allow_serial():
+    """Try to set read/write permissions for common serial ports."""
+    for dev in ("/dev/ttyUSB0", "/dev/ttyS0", "/dev/serial0"):
+        if os.path.exists(dev):
+            try:
+                os.chmod(dev, 0o666)
+            except PermissionError:
+                print(f"Permission denied when changing permissions for {dev}")
 
 
 if __name__ == "__main__":
