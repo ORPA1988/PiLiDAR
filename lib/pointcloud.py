@@ -310,6 +310,8 @@ def save_pointcloud(pcd, filepath, ply_ascii=False, ply_compression=True, csv_de
     elif ext == "csv":
         if not isinstance(pcd, np.ndarray):
             array = np.asarray(pcd.points)
+        else:
+            array = pcd
         np.savetxt(filepath, array, delimiter=csv_delimiter)
 
     elif ext == "e57":

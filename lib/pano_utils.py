@@ -162,13 +162,14 @@ def spherical_to_longlat(uv):
     return longitude, latitude
 
 
-def deg2rad(rad_list):
-    # deg_list = [math.degrees(item) for item in rad_list]  # list comprehension
-    return tuple(map(math.degrees, rad_list))
-
-
-def rad2deg(deg_list):
+def deg2rad(deg_list):
+    """Convert iterable of degrees to radians."""
     return tuple(map(math.radians, deg_list))
+
+
+def rad2deg(rad_list):
+    """Convert iterable of radians to degrees."""
+    return tuple(map(math.degrees, rad_list))
 
 
 def mod(angles, mod=math.pi*2):
