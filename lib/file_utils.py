@@ -19,6 +19,7 @@ def modify_path(input_path, insert_string, ext=None):
     new_path = os.path.join(directory, new_filename)
     return new_path
 
+
 def save_data(filepath, np_array):
     ext = os.path.splitext(filepath)[1].lstrip('.')
 
@@ -28,13 +29,16 @@ def save_data(filepath, np_array):
         t = threading.Thread(target=save_npy, args=(filepath, np_array))
     t.start()
 
+
 def save_npy(filepath, points_2d):
     np.save(filepath, points_2d)
+
 
 def save_csv(filepath, points_2d, csv_delimiter=','):
     with open(filepath, 'w', newline='') as f:
         writer = csv.writer(f, delimiter=csv_delimiter)
         writer.writerows(points_2d)
+
 
 def csv_from_npy_dir(dir):
     npy_files = list_files(dir, ext='npy')
@@ -43,29 +47,37 @@ def csv_from_npy_dir(dir):
         csv_file = os.path.splitext(npy_file)[0] + '.csv'
         save_csv(csv_file, data)
 
+
 def list_files(dir, ext=None, filter=None, recursive=False):
     # from glob import glob
-    # return sorted(glob(os.path.join(dir, '*.'+ext)))
+    # return sorted(glob(os.path.join(dir, "*."+ext)))
 
-    filepaths = list()
+    filepaths = []
+    total_files = 0
+
     for root, dirs, files in os.walk(dir, topdown=True):
         files = sorted(files)
+        total_files += len(files)
 
         for file in files:
             if filter is None or filter in file:
-                if ext is None or os.path.splitext(file)[1][1:] == ext:  # [1:] just removes the dot in ".jpg"
+                if ext is None or os.path.splitext(file)[1][1:] == ext:
                     filepath = os.path.join(root, file)
                     filepaths.append(filepath)
-            
+
         if not recursive:
             break
-    print(f"found: {len(filepaths)} {ext} files ({len(files)-len(filepaths)} other)")
+
+    other_count = total_files - len(filepaths)
+    print(f"found: {len(filepaths)} {ext} files ({other_count} other)")
     return filepaths
+
 
 def make_dir(dir):
     # if not os.path.exists(dir):
     os.makedirs(dir, exist_ok=True)
     return dir
+
 
 def angles_from_filenames(data_dir, name="plane", ext="jpg", filter_NaN=True):
     # create a list of files
@@ -89,7 +101,9 @@ def angles_from_filenames(data_dir, name="plane", ext="jpg", filter_NaN=True):
 
     if filter_NaN:
         # filter out the lines that contain a NaN value in the angles list
-        files, angles = zip(*filter(lambda pair: not math.isnan(pair[1]), zip(files, angles)))
+        files, angles = zip(
+            *filter(lambda pair: not math.isnan(pair[1]), zip(files, angles))
+        )
 
     return files, angles
 
@@ -106,4 +120,3 @@ if __name__ == "__main__":
 
     for i, (file, angle) in enumerate(zip(files, angles)):
         print(f"{i:03d}: {file}\t -> {angle:.2f}")
-    
