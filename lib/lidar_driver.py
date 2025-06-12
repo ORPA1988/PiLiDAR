@@ -199,6 +199,7 @@ class Lidar:
             self.luminance_package[counter] = byte_array[8 + i]
 
 
+
     @staticmethod
     def polar2cartesian(angles, distances, offset):
         angles = list(np.array(angles) + offset)

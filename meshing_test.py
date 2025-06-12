@@ -1,9 +1,11 @@
 import os
+
 import pytest
 try:
     import open3d as o3d
 except ModuleNotFoundError:
     pytest.skip("open3d not installed", allow_module_level=True)
+
 
 from lib.visualization import visualize
 from lib.mesh_utils import mesh_from_poisson
