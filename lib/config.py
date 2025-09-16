@@ -40,6 +40,11 @@ class Config:
         if scans_root is not None:
             self.set(scans_root, "SCANS_ROOT")
         self.scans_root = os.path.join(self.base_dir, self.get("SCANS_ROOT"))
+
+        # Simulation support is optional.  Beginners can simply flip the flag in
+        # ``config.json`` and generate demo data on any computer.
+        self.simulation_mode = self.dict.get("SIMULATION_MODE", False)
+        self.simulation = self.dict.get("SIMULATION", {})
         
         # write hex strings back to dict:
         protocol = self.dict["LIDAR"]["protocol"]
@@ -104,16 +109,23 @@ class Config:
         else:
             self.scan_id = datetime.datetime.now().strftime("%y%m%d-%H%M")
         
-        self.scan_dir           = os.path.join(self.scans_root, self.scan_id)
-        self.pto_path           = os.path.join(self.scan_dir, f'{self.scan_id}.pto')
-        self.pano_path          = os.path.join(self.scan_dir, f'{self.scan_id}{self.get("PANO", "OUTPUT_NAME")}')
-        self.raw_path           = os.path.join(self.scan_dir, f"{self.scan_id}{self.get('LIDAR', 'RAW_NAME')}")
-        self.pcd_path           = os.path.join(self.scan_dir, f'{self.scan_id}.{self.get("3D", "EXT")}')            # .pcd, .ply, .xyz, .xyzrgb
-        self.filtered_pcd_path  = os.path.join(self.scan_dir, f'{self.scan_id}_filtered.{self.get("3D", "EXT")}')
+        self.scan_dir  = make_dir(os.path.join(self.scans_root, self.scan_id))
+        self.raw_dir   = make_dir(os.path.join(self.scan_dir, "raw"))
+        self.pointcloud_dir = make_dir(os.path.join(self.scan_dir, "pointcloud"))
+        self.fusion_dir = make_dir(os.path.join(self.scan_dir, "fusion"))
+
+        self.pto_path  = os.path.join(self.scan_dir, f'{self.scan_id}.pto')
+        self.pano_path = os.path.join(self.scan_dir, f'{self.scan_id}{self.get("PANO", "OUTPUT_NAME")}')
+
+        self.raw_path          = os.path.join(self.raw_dir, f"{self.scan_id}{self.get('LIDAR', 'RAW_NAME')}")
+        self.pcd_path          = os.path.join(self.pointcloud_dir, f'{self.scan_id}.{self.get("3D", "EXT")}')
+        self.filtered_pcd_path = os.path.join(self.pointcloud_dir, f'{self.scan_id}_filtered.{self.get("3D", "EXT")}')
+        self.lidar_projection_path = os.path.join(self.fusion_dir, f"{self.scan_id}_lidar_projection.jpg")
+        self.fusion_overlay_path   = os.path.join(self.fusion_dir, f"{self.scan_id}_fusion.jpg")
 
         self.lidar_dir = os.path.join(self.scan_dir, "lidar")         # TODO remove -> npy files replaced by single pkl file
-        
-        self.img_dir   = make_dir(os.path.join(self.scan_dir, "img"))
+
+        self.img_dir   = make_dir(os.path.join(self.raw_dir, "img"))
         self.tmp_dir   = make_dir(os.path.join(self.scan_dir, "tmp"))
         
         self.imglist = []
