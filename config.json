@@ -7,6 +7,8 @@
 
     "ENABLE_VERTEXCOLOUR": true,
     "ENABLE_FILTERING": false,
+
+    "SIMULATION_MODE": false,
     
     "SCANS_ROOT": "scans",
     "ANGULAR_DIGITS": 3,
@@ -83,6 +85,12 @@
         "SCALE": 0.001, 
         "EXT": "ply",
         "ASCII": false
+    },
+
+    "SIMULATION": {
+        "IMG_DIMS": [640, 360],
+        "PLANES": 90,
+        "POINTS_PER_PLANE": 240
     },
 
     "FILTERING": {
