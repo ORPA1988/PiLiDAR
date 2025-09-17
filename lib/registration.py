@@ -13,7 +13,10 @@ Colored registration
 https://www.open3d.org/docs/release/tutorial/pipelines/colored_pointcloud_registration.html
 '''
 
-import open3d as o3d
+try:  # pragma: no cover - optional dependency
+    import open3d as o3d
+except ModuleNotFoundError:  # pragma: no cover
+    o3d = None
 import time
 
 try:
@@ -28,6 +31,8 @@ platform = get_platform()
 
 # Global Registration using RANSAC
 def global_registration(source, target, voxel_size, fast=False, normals_nn=30, fpfh_nn=100, max_iteration=100000, confidence=0.999, edgelength=0.9):
+    if o3d is None:  # pragma: no cover
+        raise RuntimeError("Open3D ist für die Registrierung optional und nicht installiert.")
 
     source_down = estimate_point_normals(source.voxel_down_sample(voxel_size), radius=voxel_size*2, max_nn=normals_nn)
 
@@ -66,6 +71,8 @@ def global_registration(source, target, voxel_size, fast=False, normals_nn=30, f
 
 # ICP (P2P or P2L) Registration
 def icp(source, target, transform, voxel_size, p2l=True, p2p_max_iteration=2000):
+    if o3d is None:  # pragma: no cover
+        raise RuntimeError("Open3D ist für die Registrierung optional und nicht installiert.")
     dist_thres = voxel_size * 0.4
 
     if p2l:  # point-to-plane ICP

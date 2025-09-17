@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import os
+import json
 import threading
 import time
-from typing import Callable, Dict, Optional
+from statistics import mean
+from typing import Callable, Dict, List, Optional
+
+from lib.pointcloud import save_summary
 
 
 class ScanController:
@@ -24,6 +28,7 @@ class ScanController:
         self._stop_event = threading.Event()
         self._scan_thread: Optional[threading.Thread] = None
         self.scan_result: Dict[str, Optional[object]] = {}
+        self.scan_metadata: Dict[str, object] = {}
 
         self.stepper = None
         self.lidar = None
@@ -122,6 +127,14 @@ class ScanController:
         self.config.init(scan_id=self.custom_scan_id)
         self.config.relay_on()
 
+        self.scan_metadata = {
+            "start_time": time.time(),
+            "step_events": [],
+            "requested_steps": 0,
+            "completed_steps": 0,
+            "stop_requested": False,
+        }
+
         self.stepper = self.stepper_factory(self.config) if self.config.get("ENABLE_LIDAR") else None
         self.lidar = self.lidar_factory(self.config) if self.config.get("ENABLE_LIDAR") else None
         if self.lidar is not None:
@@ -215,12 +228,22 @@ class ScanController:
         def move_steps_callback():
             if self._stop_event.is_set():
                 self.lidar.request_stop()
+                self.scan_metadata["stop_requested"] = True
                 return
             if self.stepper is None:
                 return
-            steps = self.config.steps if self.config.SCAN_ANGLE > 0 else -self.config.steps
-            self.stepper.move_steps(steps)
-            self.lidar.z_angle = self.stepper.get_current_angle()
+            requested = self.config.steps if self.config.SCAN_ANGLE > 0 else -self.config.steps
+            moved = self.stepper.move_steps(requested)
+            self.scan_metadata["requested_steps"] += abs(requested)
+            self.scan_metadata["completed_steps"] += abs(moved)
+            event = {
+                "timestamp": time.time(),
+                "requested": requested,
+                "completed": moved,
+                "z_angle": self.stepper.get_current_angle(),
+            }
+            self.scan_metadata["step_events"].append(event)
+            self.lidar.z_angle = event["z_angle"]
             time.sleep(scan_delay)
 
         self._notify("Starte LiDAR-Aufnahme...")
@@ -229,7 +252,7 @@ class ScanController:
         if self.stepper is not None:
             self.stepper.move_to_angle(0)
 
-        metadata = {"samples": len(self.lidar.package_history)}
+        metadata = self._finalize_metadata(len(self.lidar.package_history))
         raw_scan = self.lidar.create_raw_scan(metadata=metadata)
         self._notify(f"Rohdaten gespeichert unter {self.config.raw_path}")
         return raw_scan
@@ -245,8 +268,83 @@ class ScanController:
         from lib.pointcloud import process_raw
 
         self._notify("Erzeuge Punktwolken...")
-        result = process_raw(self.config, save=True)
-        return result
+        clouds = process_raw(self.config, save=True)
+        return {
+            "intensity": clouds.intensity,
+            "color": clouds.color,
+            "filtered": clouds.filtered,
+        }
+
+    def _finalize_metadata(self, samples: int) -> Dict[str, object]:
+        end_time = time.time()
+        start_time = self.scan_metadata.get("start_time")
+        duration = end_time - start_time if start_time else None
+
+        expected = int(self.scan_metadata.get("requested_steps", 0))
+        completed = int(self.scan_metadata.get("completed_steps", 0))
+        tolerance = max(1, int(expected * 0.01)) if expected else 0
+        difference = expected - completed
+
+        plausibility = {
+            "expected_steps": expected,
+            "completed_steps": completed,
+            "difference": difference,
+            "tolerance": tolerance,
+            "within_tolerance": abs(difference) <= tolerance,
+        }
+
+        history_deviation = self._update_history(duration, completed, samples)
+        if history_deviation is not None:
+            plausibility["historical_deviation"] = history_deviation
+
+        summary = {
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration": duration,
+            "samples": samples,
+            "step_events": self.scan_metadata.get("step_events", []),
+            "plausibility": plausibility,
+            "stop_requested": self.scan_metadata.get("stop_requested", False),
+        }
+
+        summary_path = os.path.join(self.config.logs_dir, "scan_summary.json")
+        save_summary(summary_path, summary)
+        return summary
+
+    def _update_history(self, duration: Optional[float], completed_steps: int, samples: int) -> Optional[float]:
+        history_path = os.path.join(self.config.scans_root, "scan_history.json")
+        history: List[Dict[str, object]]
+        if os.path.exists(history_path):
+            with open(history_path, "r", encoding="utf-8") as handle:
+                history = json.load(handle)
+        else:
+            history = []
+
+        entry = {
+            "scan_id": getattr(self.config, "scan_id", "unknown"),
+            "completed_steps": completed_steps,
+            "samples": samples,
+            "duration": duration,
+        }
+        history.append(entry)
+
+        with open(history_path, "w", encoding="utf-8") as handle:
+            json.dump(history, handle, indent=2)
+
+        if len(history) <= 1:
+            return None
+
+        previous = history[:-1]
+        valid_steps = [item["completed_steps"] for item in previous if item["completed_steps"]]
+        if not valid_steps:
+            return None
+
+        avg_steps = mean(valid_steps)
+        if avg_steps == 0:
+            return None
+
+        deviation = abs(completed_steps - avg_steps) / avg_steps
+        return deviation
 
     # ------------------------------------------------------------------
     # cleanup

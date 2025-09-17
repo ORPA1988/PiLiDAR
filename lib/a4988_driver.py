@@ -164,7 +164,7 @@ class A4988:
         GPIO.output(self.step_pin, False)
         sleep(self.delay)
 
-    def move_steps(self, steps: int) -> None:
+    def move_steps(self, steps: int) -> int:
         """Move the motor by a given amount of micro steps.
 
         Negative values rotate clockwise, positive values rotate
@@ -180,14 +180,15 @@ class A4988:
             self.step()
 
         # update current steps considering direction
-        self.current_steps += steps if not direction else -steps
+        delta = steps if not direction else -steps
+        self.current_steps += delta
+        return delta
 
     def move_angle(self, angle: float) -> int:
         """Convenience wrapper that accepts a rotation in degrees."""
 
         steps = self.get_steps_for_angle(abs(angle))
-        self.move_steps(steps if angle >= 0 else -steps)
-        return steps
+        return abs(self.move_steps(steps if angle >= 0 else -steps))
 
     def move_to_angle(self, target_angle: float, mod: bool = True) -> None:
         """Rotate the platform to an absolute target angle.

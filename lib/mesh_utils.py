@@ -4,16 +4,25 @@ normals: http://www.open3d.org/docs/release/python_api/open3d.geometry.PointClou
 """
 
 import numpy as np
-import open3d as o3d
+try:  # pragma: no cover - optional dependency
+    import open3d as o3d
+except ModuleNotFoundError:  # pragma: no cover - Open3D not installed
+    o3d = None
 
 
 def sample_poisson_disk(pcd, count=1000000):
+    if o3d is None:  # pragma: no cover
+        raise RuntimeError("Open3D ist für die Mesherzeugung erforderlich.")
     return pcd.sample_points_poisson_disk(count)
 
 def estimate_mesh_normals(mesh):
+    if o3d is None:  # pragma: no cover
+        raise RuntimeError("Open3D ist für die Mesherzeugung erforderlich.")
     return mesh.compute_vertex_normals()
 
 def mesh_optimize(mesh, count=1000000):
+    if o3d is None:  # pragma: no cover
+        raise RuntimeError("Open3D ist für die Mesherzeugung erforderlich.")
     mesh = mesh.simplify_quadric_decimation(count)
     mesh.remove_degenerate_triangles()
     mesh.remove_duplicated_triangles()
@@ -22,9 +31,13 @@ def mesh_optimize(mesh, count=1000000):
     return mesh
 
 def mesh_from_alpha_shape(pcd,  alpha=0.03):
+    if o3d is None:  # pragma: no cover
+        raise RuntimeError("Open3D ist für die Mesherzeugung erforderlich.")
     return o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape(pcd, alpha)
 
 def mesh_from_ball_pivoting(pcd):
+    if o3d is None:  # pragma: no cover
+        raise RuntimeError("Open3D ist für die Mesherzeugung erforderlich.")
     '''https://towardsdatascience.com/5-step-guide-to-generate-3d-meshes-from-point-clouds-with-python-36bad397d8ba'''
     distances = pcd.compute_nearest_neighbor_distance()
     avg_dist = np.mean(distances)
@@ -34,6 +47,8 @@ def mesh_from_ball_pivoting(pcd):
     return mesh
 
 def mesh_from_poisson(pcd, depth=10, k=100, estimate_normals=True, density_threshold=0.1, return_densities=False):
+    if o3d is None:  # pragma: no cover
+        raise RuntimeError("Open3D ist für die Mesherzeugung erforderlich.")
     if estimate_normals:
         pcd.estimate_normals()
         pcd.orient_normals_consistent_tangent_plane(k=k)

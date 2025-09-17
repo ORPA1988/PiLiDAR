@@ -5,7 +5,10 @@ glxinfo | grep "OpenGL version"
 >> OpenGL version string: 3.1 Mesa 23.2.1-1~bpo12+rpt2
 """
 
-import open3d as o3d
+try:  # pragma: no cover - optional dependency
+    import open3d as o3d
+except ModuleNotFoundError:  # pragma: no cover - Open3D not installed on Pi 5 builds
+    o3d = None
 import copy
 import os
 import colorsys
@@ -19,7 +22,16 @@ except:
     from platform_utils import get_platform
 
 
+def _require_open3d():  # pragma: no cover - optional path
+    if o3d is None:
+        raise RuntimeError(
+            "Open3D ist nicht installiert. Die Visualisierung ist optional und "
+            "nicht Teil der automatisierten Scan-Pipeline."
+        )
+
+
 def opengl_fallback(check=True):
+    _require_open3d()
     # suppress OpenGL warnings
     o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Error)  # .Debug
 
@@ -75,6 +87,7 @@ def __validate_object_list__(object_list):
 def visualize(object_list, title="PiLiDAR", transformation=None, fullscreen=True, size=(1280,720), view="front", point_size=1, 
               unlit=False, backface=True, point_colors="color", bgcolor=(0.15, 0.15, 0.15), enable_fallback=True):
     
+    _require_open3d()
     object_list = __validate_object_list__(object_list)
 
     if enable_fallback:

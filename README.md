@@ -1,182 +1,177 @@
-# PiLiDAR – DIY 360° 3D Panorama Scanner
+# PiLiDAR – 3D Scanner für den Raspberry Pi 5
 
-PiLiDAR kombiniert einen LiDAR Sensor, eine Kamera und einen getriebeübersetzten
-Schrittmotor zu einem vollständigen 3D-Scanner. Dieses Repository enthält einen
-kompletten, kommentierten Workflow – vom Aufnehmen der Rohdaten über das
-Stitchen eines Panoramas bis hin zur Erzeugung farbiger Punktwolken.
-
-Die folgenden Kapitel erklären jeden Schritt so, dass auch absolute
-Einsteiger*innen sicher zum Ergebnis kommen.
-
----
-
-## 1. Installation und Vorbereitung
-
-1. **Repository klonen**
-
-   ```bash
-   git clone https://github.com/<dein-account>/PiLiDAR.git
-   cd PiLiDAR
-   ```
-
-2. **Python-Umgebung vorbereiten**  
-   Eine virtuelle Umgebung verhindert Konflikte mit anderen Projekten:
-
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate  # Windows: .venv\Scripts\activate
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
-
-3. **Hardware anschließen**
-
-   - LDRobot STL27L LiDAR
-   - Raspberry Pi HQ Kamera (oder kompatibel)
-   - NEMA17 Schrittmotor mit A4988 Treiber und Planetengetriebe
-   - Stromversorgung: 5 V für den LiDAR, 12 V bzw. passender Akku für den Motor
-
-   Achte darauf, dass der Motor aufgrund des Getriebes langsam, aber sehr
-   gleichmäßig bewegt wird. Die voreingestellten Mikroschritte und die im
-   Code verwendeten Pausen sind darauf abgestimmt.
-
-4. **Serielle Schnittstelle freischalten (nur Raspberry Pi)**
-
-   ```bash
-   sudo chmod a+rw /dev/ttyUSB0  # oder /dev/ttyS0 je nach Anschluss
-   ```
-
-5. **Optionale Extras**
-
-   - Ein Taster kann über `gpio_interrupt.py` (liegt nun im Ordner `old/`) zum
-     Starten genutzt werden.
-   - Für eine automatische Panoramaerstellung sollte Hugin installiert sein.
+Diese Version von **PiLiDAR** richtet sich explizit an den Raspberry Pi 5 und
+setzt auf einen vollständig automatisierten Workflow für den STL27L LiDAR und
+eine Pi Camera Module 2.  Die Software liest den LiDAR über USB aus, steuert den
+Schrittmotor über einen A4988, synchronisiert pro Z-Schritt ein Foto und
+erzeugt eine farbige Punktwolke im ``PLY``-Format.  Alle Verarbeitungsschritte
+bauen auf der **Point Cloud Library (PCL)** auf.  Eine pybind11-Erweiterung
+bindet die kompilierten PCL-Funktionen an Python; in Entwicklungsumgebungen ohne
+PCL greift eine reine NumPy-Implementierung, damit Unit-Tests weiterhin laufen.
 
 ---
 
-## 2. Nutzung
+## 1. Hardwareübersicht
 
-### 2.1 Grafische Benutzeroberfläche
+| Komponente | Zweck |
+|------------|-------|
+| Raspberry Pi 5 | Steuerrechner und Datenspeicher |
+| STL27L LiDAR (USB, 921 600 Baud) | liefert 21 600 Messungen/s inkl. Intensität |
+| Pi Camera Module 2 mit Fischaugenoptik | Farbaufnahme pro Z-Schritt |
+| Z-Achse mit identischer Getriebeübersetzung wie im ursprünglichen Projekt | reproduzierbare Drehung |
+| A4988 Treiber | Mikrostepping für den Schrittmotor |
 
-Die GUI richtet sich an Einsteiger*innen. Sie ermöglicht das Anpassen der
-wichtigsten Parameter und das Starten/Stoppen des Scans.
+Die Stromversorgung des LiDAR lässt sich per GPIO zuschalten, wodurch der Sensor
+softwareseitig abgeschaltet werden kann.  Die Motorsteuerung erfolgt mit einem
+DMA-fähigen GPIO-Treiber (``rpi-lgpio``) – ``pigpio`` wird auf dem Pi 5 nicht
+mehr verwendet.
+
+---
+
+## 2. Installation
+
+### 2.1 Betriebssystem vorbereiten
+
+1. Raspberry Pi OS (64‑bit) mit aktiviertem Kamera-Stack installieren.
+2. ``sudo raspi-config`` ausführen und die Kamera aktivieren.
+3. Seriellen Zugriff freischalten:
+
+   ```bash
+   sudo usermod -a -G dialout $USER
+   sudo chmod a+rw /dev/ttyUSB0   # Anpassung, falls der LiDAR an anderem Port hängt
+   ```
+
+### 2.2 Repository und Python-Umgebung
 
 ```bash
-python PiLiDAR.py --gui
+git clone https://github.com/<dein-account>/PiLiDAR.git
+cd PiLiDAR
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-*Wichtige Funktionen in der GUI*
+### 2.3 PCL-Anbindung kompilieren
 
-- **Scan ID**: optionaler Name für den Durchlauf, wird als Ordnername benutzt.
-- **Horizontale Auflösung**: bestimmt das Schrittmaß des Motors in Grad.
-- **Scanwinkel**: begrenzt den vertikalen Scanbereich.
-- **Schalter**: Kamera, LiDAR und 3D-Punktwolke können einzeln aktiviert werden.
-- Der Statusbereich protokolliert jeden Arbeitsschritt. Nach Abschluss zeigt
-  ein Hinweis den Speicherort aller Ergebnisse an.
-
-### 2.2 Headless-Modus (Kommandozeile)
-
-Wer direkt per Terminal arbeiten möchte, startet einfach:
+Auf dem Pi wird die native Erweiterung nur einmal gebaut.  Sie verbindet die
+Python-Schicht mit PCL:
 
 ```bash
-python PiLiDAR.py
+sudo apt install libpcl-dev pybind11-dev
+cmake -S cpp -B build -DPYTHON_EXECUTABLE=$(which python)
+cmake --build build --target pilidar_pcl
+cp build/pilidar_pcl$(python -c 'import sysconfig;print(sysconfig.get_config_var("EXT_SUFFIX"))') lib/
 ```
 
-Der Lauf erzeugt automatisch alle Daten. Abbruch ist jederzeit mit `Strg+C`
-möglich, der Controller stoppt den Motor und legt die Geräte sicher still.
+Fehlt die Erweiterung, nutzt die Software automatisch den NumPy-basierten
+Fallback.  Dadurch bleibt die Entwicklung auf Nicht-Pi-Systemen möglich.
 
 ---
 
-## 3. Ergebnisdaten und Ordnerstruktur
+## 3. Konfiguration
 
-Jeder Scan landet in einem eigenen Unterordner im Verzeichnis `scans/`.
+Alle Einstellungen finden sich in ``config.json``.  Wichtige Werte:
 
+* ``ENABLE_LIDAR`` / ``ENABLE_CAM`` / ``ENABLE_3D``: steuern die Pipeline.
+* ``STEPPER``: Pins, Mikrostepping und Verzögerungen für den A4988.
+* ``3D``: Skalierung, Z‑Offset sowie Dateiendung (``ply`` oder ``pcd``).
+* ``VERTEXCOLOUR``: Parameter zur Farbprojektion des Panoramas.
+
+Vor jedem Scan erzeugt die Software automatisch eine Ordnerstruktur unter
+``scans/<SCAN-ID>/`` mit Unterordnern für Bilder, Logs und Rohdaten.  Die
+Ordnernamen lassen sich über die GUI oder die Kommandozeile beeinflussen.
+
+---
+
+## 4. Workflow
+
+1. **Scan starten** – via GUI (`python PiLiDAR.py --gui`) oder direkt auf der
+   Kommandozeile (`python PiLiDAR.py`).
+2. **LiDAR aktivieren** – der Controller schaltet die Versorgung und den Motor
+   ein.  Die Stromabschaltung erfolgt ebenfalls softwareseitig.
+3. **Kameraschuss je Z-Schritt** – nach jedem Stepper-Schritt löst die Kamera
+   genau ein Foto aus, das später für die Farbzuordnung genutzt wird.
+4. **Rohdaten erfassen** – LiDAR-Pakete werden mit Zeitstempel, Winkel,
+   Distanz, Intensität und aktuellem Z-Winkel gespeichert.
+5. **Punktwolke berechnen** – die PCL-Backend-Funktionen erzeugen eine farbige
+   Punktwolke inkl. Intensitätskanal.
+6. **Ablage** – alle Ergebnisse werden in einem Scan-Ordner gesichert:
+
+   ```
+   scans/<SCAN-ID>/
+   ├── img/                      # Fotos der Pi-Cam
+   ├── tmp/                      # temporäre HDR-Dateien
+   ├── logs/                     # JSON-Log & Plausibilitätscheck
+   ├── <SCAN-ID>_lidar.pkl       # Rohdaten (NumPy serialisiert)
+   ├── <SCAN-ID>_intensity.ply   # Punktwolke mit Intensitätsfärbung
+   ├── <SCAN-ID>_vertex.ply      # Punktwolke mit Kamerafarben
+   └── <SCAN-ID>_blended_fused.jpg
+   ```
+
+Die erzeugte ``PLY``-Datei enthält XYZ, RGB und einen Intensitätswert pro
+Punkt.  Für ``PCD``-Ausgaben muss lediglich die Dateiendung in ``config.json``
+angepasst werden.
+
+---
+
+## 5. Plausibilitätsprüfung
+
+Während des Scans speichert der Controller folgende Kennzahlen:
+
+* Start- und Endzeit des Scans sowie die Gesamtdauer.
+* Gewünschte vs. tatsächlich gefahrene Schrittzahl.
+* Liste aller Schrittkommandos inklusive Zeitstempel und aktuellem Z-Winkel.
+* Anzahl der empfangenen LiDAR-Pakete.
+
+Die Daten landen in ``logs/scan_summary.json``.  Eine zusätzliche Datei
+``scans/scan_history.json`` speichert aggregierte Werte vergangener Läufe.
+Beim Abschluss eines Scans wird automatisch geprüft, ob die Schrittzahl im
+1 %-Toleranzfenster liegt und wie stark die Ergebnisse vom historischen Mittel
+abweichen.  So lassen sich Ausreißer (z. B. verpasste Schritte) nachträglich
+identifizieren.
+
+---
+
+## 6. PCL-gestützte Nachbearbeitung
+
+* **Normalenabschätzung** – PCL berechnet Oberflächennormalen für alle Punkte.
+* **Intensitätsfärbung** – Intensitäten werden in ein RGB-Farbschema
+  (``viridis``) überführt.
+* **Vertex-Farben** – Falls ein Panorama vorliegt, werden RGB-Werte über eine
+  sphärische Projektion auf die Punkte gemappt.
+* **Filter** – optionales Voxel-Downsampling und Radius-Outlier-Filter.
+
+Alle Operationen laufen headless und benötigen keine Open3D-GUI.  Die Dateien
+lassen sich anschließend in CloudCompare, MeshLab oder ROS2 integrieren.
+
+---
+
+## 7. Tipps für den Pi 5
+
+* ``rpi-lgpio`` stellt stabile Pulsweiten für den Steppertreiber bereit.  Die
+  Pins sind in ``config.json`` frei wählbar.
+* Der USB-LiDAR sollte an einem aktiven Hub hängen, damit das stromlose
+  Schalten zuverlässig funktioniert.
+* Ein Kühler für die CPU verhindert Throttling bei langen Scans.
+
+---
+
+## 8. Tests & Entwicklung
+
+Die Python-Unit-Tests laufen plattformunabhängig.  Dank der Fallback-Klassen in
+``lib/pcl_bindings.py`` werden keine nativen Bibliotheken benötigt.  Auf dem Pi
+empfiehlt es sich, die Tests nach jeder Anpassung auszuführen:
+
+```bash
+pytest
 ```
-scans/<SCAN-ID>/
-├── img/                 # Einzelbilder für das Panorama
-├── tmp/                 # Temporäre Dateien während der Verarbeitung
-├── logs/                # Statusmeldungen und Zusatzinformationen
-├── lidar/               # Legacy-Ordner (ältere Rohformate)
-├── <SCAN-ID>_lidar.pkl  # Kompletter LiDAR-Rohdatensatz
-├── <SCAN-ID>_intensity.ply  # Punktwolke mit Intensitätsfärbung
-├── <SCAN-ID>_vertex.ply     # Punktwolke mit Bildfarben (falls Panorama vorhanden)
-└── <SCAN-ID>_blended_fused.jpg  # Panorama aus den Kamerabildern
-```
-
-Alle Dateien werden automatisch erzeugt und mit sprechenden Namen versehen.
 
 ---
 
-## 4. Welche LiDAR-Daten werden gespeichert?
+## 9. Lizenz
 
-Der neue Treiber speichert den kompletten Informationsgehalt jeder Messung:
+PiLiDAR steht unter der MIT-Lizenz (siehe ``LICENSE.md``).  Beiträge sind
+willkommen – insbesondere Verbesserungen an der PCL-Erweiterung oder neue
+Kalibrier-Workflows.
 
-- `timestamp`: Zeitstempel des Pakets in Millisekunden
-- `speed`: Drehgeschwindigkeit des Sensors
-- `angles_rad`: 12 Start-/Endwinkel innerhalb des Pakets (Radiant)
-- `distances_mm`: 12 Distanzwerte in Millimetern
-- `intensities`: 12 Intensitätswerte (0–255)
-- `cartesian`: bereits umgerechnete X/Y-Koordinaten pro Messpunkt
-- `z_angle`: aktuelle Plattformposition des Steppers für dieses Paket
-- `z_angles`: Liste aller vertikalen Drehwinkel des Scans
-- `angular`: polare Punktlisten für jede Ebene
-- `cartesian_list`: kartesische Punktlisten für jede Ebene
-
-Diese Daten ermöglichen es, später eigene Auswertungen (z. B. Filter oder
-Registrierungen) aufzubauen, ohne erneut messen zu müssen.
-
----
-
-## 5. Wichtige Skripte und Ordner
-
-- `PiLiDAR.py` – Startskript, bietet Headless- und GUI-Modus.
-- `lib/scan_controller.py` – zentrale Steuerlogik, koordiniert Motor, LiDAR,
-  Kamera und Nachbearbeitung.
-- `lib/lidar_driver.py` – neuer LiDAR-Treiber mit Strom-/Motorsteuerung,
-  umfassender Datenspeicherung und Stop-Mechanismus.
-- `lib/gui.py` – Tkinter Oberfläche für einfache Bedienung.
-- `lib/pointcloud.py` – erzeugt Punktwolken (Intensität + Vertexfarben) und
-  kapselt sämtliche Nachbearbeitungsschritte.
-- `lib/config.py` – liest `config.json`, verwaltet Pfade, GPIO-Pins und sorgt
-  für eine saubere Ordnerstruktur pro Scan.
-- `old/` – enthält archivierte Testskripte (`meshing_test.py`, `process_3D.py`,
-  usw.) sowie die ursprünglichen Installationshinweise.
-
-Alle Module sind im Code umfangreich kommentiert. Dadurch lässt sich jeder
-Arbeitsschritt nachvollziehen.
-
----
-
-## 6. Hardwarehinweise
-
-- **Stepper & Getriebe**: Der Motor wird mit 16-fach Mikrostepping betrieben.
-  Durch das Planetengetriebe entsteht eine ruhige, ruckfreie Bewegung. Die
-  Parameter `STEP_DELAY` und `SCAN_DELAY` im `config.json` können bei Bedarf
-  feinjustiert werden.
-- **LiDAR-Stromversorgung**: Der Treiber kann den Sensor über das Board
-  ein- und ausschalten (`power_on()` / `power_off()` im Code). Ein externes
-  Relais ist nicht notwendig.
-- **Panorama**: Für bestmögliche Ergebnisse sollten alle Bilder mit identischer
-  Belichtung aufgenommen werden. Die automatisch ermittelten Werte sind ein
-  guter Ausgangspunkt; bei Bedarf lassen sie sich im GUI anpassen.
-
-![PiLiDAR v2](images/pilidar_covershot_v2.jpg)
-
----
-
-## 7. Fehlersuche & Tipps
-
-- **LiDAR startet nicht**: Prüfe die serielle Verbindung (`/dev/ttyUSB0`) und
-  ob `sudo chmod a+rw /dev/ttyUSB0` gesetzt wurde.
-- **Punktwolke fehlt**: Stelle sicher, dass `ENABLE_3D` in `config.json` oder
-  in der GUI aktiviert ist. Für Vertexfarben muss zusätzlich ein Panorama
-  erzeugt werden.
-- **Ruckeln während des Scans**: Reduziere `TARGET_SPEED` oder erhöhe
-  `STEP_DELAY` leicht. Beide Werte lassen sich über die GUI anpassen.
-
----
-
-## 8. Lizenz
-
-PiLiDAR steht unter der MIT-Lizenz (siehe `LICENSE.md`). Beiträge und
-Verbesserungen sind ausdrücklich willkommen.
