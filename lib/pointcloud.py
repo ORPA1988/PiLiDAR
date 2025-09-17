@@ -10,21 +10,38 @@ from scipy.spatial.transform import Rotation as R
 import pickle
 
 
-def get_scan_dict(z_angles, angular_list=None, cartesian_list=None, scan_id=None, device_id=None, sensor=None, hardware=None, location=None, author=None):
+def get_scan_dict(
+    z_angles,
+    angular_list=None,
+    cartesian_list=None,
+    packages=None,
+    metadata=None,
+    scan_id=None,
+    device_id=None,
+    sensor=None,
+    hardware=None,
+    location=None,
+    author=None,
+):
+    """Collect every bit of LiDAR information in a single dictionary."""
+
+    header = {
+        "scan_id": scan_id,
+        "device_id": device_id,
+        "sensor": sensor,
+        "hardware": hardware,
+        "location": location,
+        "author": author,
+    }
+    if metadata:
+        header.update(metadata)
+
     raw_scan = {
-        "header": {
-            # "creation_date": None,
-            # "modification_date": None,
-            "scan_id": scan_id,
-            "device_id": device_id,
-            "sensor": sensor,
-            "hardware": hardware,
-            "location": location,
-            "author": author,
-            },
+        "header": header,
         "z_angles": z_angles,
         "angular": angular_list,
-        "cartesian": cartesian_list
+        "cartesian": cartesian_list,
+        "packages": packages,
     }
     return raw_scan
 
@@ -39,92 +56,65 @@ def load_raw_scan(path):
     return raw_scan
 
 def process_raw(config, save=True):
+    """Convert the recorded LiDAR scan into Open3D point clouds."""
 
-    def get_cartesian_list(filepaths, columns="XZI", csv_delimiter=","):
-        cartesian_list = []
-        for filepath in filepaths:
-            points2d = load_pointcloud(filepath, columns, csv_delimiter, as_array=True)
-            cartesian_list.append(points2d)
-        return cartesian_list
+    if not os.path.exists(config.raw_path):
+        raise FileNotFoundError(f"Raw LiDAR data not found at {config.raw_path}")
 
-    def postprocess_3D(config, pcd, save=True):
-        # move Z offset and scale pointcloud
-        pcd = transform(pcd, translate=(0, 0, config.get("3D","Z_OFFSET")))                 # Z offset in mm
-        scene_scale = config.get("3D","SCALE")                                              # mm -> 0.001 m
-        if scene_scale !=1:
-            pcd = transform(pcd, scale=scene_scale)
+    raw_scan = load_raw_scan(config.raw_path)
 
+    array_3D = merge_2D_points(
+        raw_scan,
+        position_offset=(0, config.get("3D", "Y_OFFSET"), 0),
+        angle_offset=config.get("LIDAR", "LIDAR_OFFSET_ANGLE"),
+        up_vector=(0, 0, 1),
+    )
 
-        # ANGULAR LOOKUP ("TEXTURING")
-        if config.get("ENABLE_VERTEXCOLOUR") and os.path.exists(config.pano_path):
-            colors = angular_lookup(angular_from_cartesian(np.asarray(pcd.points)),  # angular_points
-                                    cv2.imread(config.pano_path),  # pano
-                                    scale=config.get("VERTEXCOLOUR","SCALE"), 
-                                    z_rotate=config.get("VERTEXCOLOUR","Z_ROTATE"))
-            
-            pcd.colors = o3d.utility.Vector3dVector(np.asarray(colors))
-
-        else:  # colorize pointcloud by mapping intensities to colormap
-            pcd = colormap_pcd(pcd, gamma=1, cmap="viridis")
-
-        if save:
-            save_pointcloud_threaded(pcd, config.pcd_path, ply_ascii=config.get("3D","ASCII")) 
-
-
-        # FILTER OUTLIER POINTS
-        if config.get("ENABLE_FILTERING"):
-            low_pcd = downsample(pcd, voxel_size=config.get("FILTERING", "VOXEL_SIZE"))
-
-            nb_points = config.get("FILTERING", "NB_POINTS")
-            radius = config.get("FILTERING", "RADIUS")
-            filtered_low_pcd = filter_outliers(low_pcd, nb_points=nb_points, radius=radius)
-
-            pcd = filter_by_reference(pcd, filtered_low_pcd, radius=radius)
-            if save:
-                save_pointcloud_threaded(pcd, config.filtered_pcd_path, ply_ascii=config.get("3D","ASCII"))    
-
-        return pcd
-
-    # load raw data dict from pickle file
-    if os.path.exists(config.raw_path):
-        # print("lidar.pkl file found:", config.raw_path)
-        raw_scan = load_raw_scan(config.raw_path)
-        
-
-        
-        array_3D = merge_2D_points(raw_scan, 
-                        position_offset=(0, config.get("3D","Y_OFFSET"), 0),     # Y offset in mm
-                        angle_offset=config.get("LIDAR","LIDAR_OFFSET_ANGLE"),   # small lidar rotation fix
-                        up_vector=(0,0,1)) 
-
-
-    # else:  # TODO remove -> npy files replaced by single pkl file
-    #     from lib.file_utils import angles_from_filenames
-
-    #     print("lidar.pkl file not found!")
-    #     filepaths, z_angles = angles_from_filenames(config.lidar_dir, name="plane", ext="npy")
-    #     print(f"{len(filepaths)} files found (min: {min(z_angles)}, max: {max(z_angles)}).")
-
-    #     print("processing 3D planes...")
-    #     cartesian_list = get_cartesian_list(filepaths)
-
-    #     raw_scan = get_scan_dict(z_angles, cartesian_list=cartesian_list)
-    #     if save:
-    #         save_raw_scan(config.raw_path, raw_scan)
-
-    #     array_3D = merge_2D_points(raw_scan, 
-    #                             position_offset=(0, config.get("3D","Y_OFFSET"), 0),     # Y offset in mm
-    #                             angle_offset=config.get("LIDAR","LIDAR_OFFSET_ANGLE"),   # small lidar rotation fix
-    #                             up_vector=(0,0,1)) 
-
-
-    normal_radius = config.get("3D","NORMAL_RADIUS")  # radius for normal estimation in mm
-    pcd = pcd_from_np(array_3D, estimate_normals=True, max_nn=50, radius=normal_radius)
+    normal_radius = config.get("3D", "NORMAL_RADIUS")
+    base_pcd = pcd_from_np(array_3D, estimate_normals=True, max_nn=50, radius=normal_radius)
     print("\n2D->3D merge completed.")
 
-    pcd = postprocess_3D(config, pcd, save=save)
+    base_pcd = transform(base_pcd, translate=(0, 0, config.get("3D", "Z_OFFSET")))
+    scene_scale = config.get("3D", "SCALE")
+    if scene_scale != 1:
+        base_pcd = transform(base_pcd, scale=scene_scale)
+
+    intensity_pcd = copy.deepcopy(base_pcd)
+    intensity_pcd = colormap_pcd(intensity_pcd, gamma=1, cmap="viridis")
+    if save:
+        save_pointcloud_threaded(intensity_pcd, config.intensity_pcd_path, ply_ascii=config.get("3D", "ASCII"))
+
+    vertex_pcd = None
+    if config.get("ENABLE_VERTEXCOLOUR") and os.path.exists(config.pano_path):
+        pano = cv2.imread(config.pano_path)
+        if pano is not None:
+            vertex_pcd = copy.deepcopy(base_pcd)
+            colors = angular_lookup(
+                angular_from_cartesian(np.asarray(vertex_pcd.points)),
+                pano,
+                scale=config.get("VERTEXCOLOUR", "SCALE"),
+                z_rotate=config.get("VERTEXCOLOUR", "Z_ROTATE"),
+            )
+            vertex_pcd.colors = o3d.utility.Vector3dVector(np.asarray(colors))
+            if save:
+                save_pointcloud_threaded(vertex_pcd, config.vertex_pcd_path, ply_ascii=config.get("3D", "ASCII"))
+        else:
+            print("Warnung: Panorama konnte nicht geladen werden.")
+    else:
+        print("Panorama-Färbung übersprungen (deaktiviert oder keine Bilddatei gefunden).")
+
+    filtered_pcd = None
+    if config.get("ENABLE_FILTERING"):
+        low_pcd = downsample(intensity_pcd, voxel_size=config.get("FILTERING", "VOXEL_SIZE"))
+        nb_points = config.get("FILTERING", "NB_POINTS")
+        radius = config.get("FILTERING", "RADIUS")
+        filtered_low_pcd = filter_outliers(low_pcd, nb_points=nb_points, radius=radius)
+        filtered_pcd = filter_by_reference(intensity_pcd, filtered_low_pcd, radius=radius)
+        if save:
+            save_pointcloud_threaded(filtered_pcd, config.filtered_pcd_path, ply_ascii=config.get("3D", "ASCII"))
+
     print("\nprocessing 3D completed.")
-    return pcd
+    return {"intensity": intensity_pcd, "vertex": vertex_pcd, "filtered": filtered_pcd}
 
 
 #------------------------------------------------------------------------------------------------
@@ -606,7 +596,7 @@ if __name__ == "__main__":
 
     pano = cv2.imread(config.pano_path)
 
-    pcd = load_pointcloud(config.pcd_path)
+    pcd = load_pointcloud(config.intensity_pcd_path)
 
     # CREATE PANORAMA FROM LUMINANCE
     lidar_pano = get_lidar_pano(pcd, image_width=2048, image_height=1024)
