@@ -9,9 +9,10 @@ for our automated tests inside the container environment.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 from time import sleep
-from typing import Iterable
+from typing import Iterable, Optional
 
 
 # ``RPi.GPIO`` is only available on the Raspberry Pi.  When the import fails we
@@ -34,6 +35,8 @@ except (ModuleNotFoundError, RuntimeError):  # pragma: no cover - executed off P
 
         BCM = "BCM"
         OUT = "OUT"
+        HIGH = True
+        LOW = False
 
         @staticmethod
         def setwarnings(state: bool):
@@ -59,6 +62,38 @@ except (ModuleNotFoundError, RuntimeError):  # pragma: no cover - executed off P
     _GPIO_MESSAGE = "Using simulated GPIO interface"
 
 
+_pwm_spec = importlib.util.find_spec("rpi_hardware_pwm")
+if _pwm_spec is not None:  # pragma: no cover - depends on platform
+    from rpi_hardware_pwm import HardwarePWM  # type: ignore
+    _PWM_MESSAGE = "Using rpi-hardware-pwm interface"
+else:  # pragma: no cover - executed off Pi
+    HardwarePWM = None  # type: ignore
+    _PWM_MESSAGE = "Using simulated PWM interface"
+
+
+class _MockPWM:
+    """Fallback PWM implementation used outside of the Raspberry Pi."""
+
+    def __init__(self, *, pwm_channel: int, hz: float) -> None:
+        self.pwm_channel = pwm_channel
+        self.hz = hz
+        self.duty_cycle = 0.0
+        print(f"[SIM] Initialising mock PWM on channel {pwm_channel} at {hz:.1f} Hz")
+
+    def start(self, duty_cycle: float) -> None:
+        self.duty_cycle = duty_cycle
+        print(
+            f"[SIM] Starting PWM on channel {self.pwm_channel} at {self.hz:.1f} Hz with {duty_cycle:.1f}% duty cycle"
+        )
+
+    def stop(self) -> None:
+        print(f"[SIM] Stopping PWM on channel {self.pwm_channel}")
+
+    def change_frequency(self, hz: float) -> None:
+        self.hz = hz
+        print(f"[SIM] Changing PWM frequency on channel {self.pwm_channel} to {hz:.1f} Hz")
+
+
 class A4988:
     """Simple wrapper around the A4988 stepper motor driver board.
 
@@ -79,6 +114,11 @@ class A4988:
         step_angle: float = 1.8,
         microsteps: int = 16,
         gear_ratio: float = 1.0,
+        enable_pin: Optional[int] = None,
+        pwm_channel: Optional[int] = None,
+        pwm_frequency: Optional[float] = None,
+        pwm_duty_cycle: float = 50.0,
+        pulse_width: float = 0.0001,
         verbose: bool = False,
     ) -> None:
         """Create a new controller instance.
@@ -114,6 +154,13 @@ class A4988:
         self.step_pin = step_pin
         GPIO.setup(self.step_pin, GPIO.OUT)
 
+        self.enable_pin = enable_pin
+        if self.enable_pin is not None:
+            GPIO.setup(self.enable_pin, GPIO.OUT)
+            GPIO.output(self.enable_pin, GPIO.HIGH)
+
+        self.pulse_width = max(pulse_width, 1e-6)
+
         self.ms_pins = list(ms_pins)
         for pin in self.ms_pins:
             GPIO.setup(pin, GPIO.OUT)
@@ -124,7 +171,23 @@ class A4988:
         self.step_angle = step_angle
         self.microsteps = microsteps
         self.gear_ratio = gear_ratio
-        self.delay = delay
+        self.delay = max(delay, 1e-6)
+
+        base_frequency = 1.0 / max(self.delay + self.pulse_width, 1e-6)
+        self.pwm_frequency = float(pwm_frequency) if pwm_frequency else base_frequency
+        self.pwm_duty_cycle = float(pwm_duty_cycle)
+        self.pwm_channel = pwm_channel
+        self.pwm: Optional[object] = None
+        if self.pwm_channel is not None:
+            pwm_backend = HardwarePWM if HardwarePWM is not None else _MockPWM
+            try:
+                self.pwm = pwm_backend(pwm_channel=self.pwm_channel, hz=self.pwm_frequency)
+                print(f"[A4988] {_PWM_MESSAGE} (channel {self.pwm_channel})")
+            except Exception as exc:  # pragma: no cover - hardware specific
+                print(f"[A4988] PWM initialisation failed: {exc}")
+                self.pwm = None
+        else:
+            print("[A4988] PWM channel not configured, using software stepping")
 
         # Look-up table configuring the microstepping pins.  Beginners do not
         # have to memorise the required binary states – the driver handles it.
@@ -148,6 +211,13 @@ class A4988:
 
         GPIO.output(self.dir_pin, direction)
 
+    def enable_driver(self, enabled: bool) -> None:
+        """Control the enable pin of the driver (active low)."""
+
+        if self.enable_pin is None:
+            return
+        GPIO.output(self.enable_pin, GPIO.LOW if enabled else GPIO.HIGH)
+
     def get_steps_for_angle(self, angle: float) -> int:
         """Translate an angle into micro step counts."""
 
@@ -162,7 +232,7 @@ class A4988:
         """Trigger a single micro step on the driver."""
 
         GPIO.output(self.step_pin, True)
-        sleep(0.0001)
+        sleep(self.pulse_width)
         GPIO.output(self.step_pin, False)
         sleep(self.delay)
 
@@ -172,9 +242,32 @@ class A4988:
         direction = steps < 0
         steps = abs(int(steps))
 
+        if steps == 0:
+            return
+
         self.set_direction(direction)
-        for _ in range(steps):
-            self.step()
+        self.enable_driver(True)
+        sleep(self.pulse_width)
+
+        try:
+            if self.pwm is not None and self.pwm_frequency > 0:
+                try:
+                    if hasattr(self.pwm, "change_frequency"):
+                        self.pwm.change_frequency(self.pwm_frequency)
+                    self.pwm.start(self.pwm_duty_cycle)
+                    duration = steps / self.pwm_frequency
+                    sleep(max(duration, self.pulse_width))
+                    self.pwm.stop()
+                except Exception as exc:  # pragma: no cover - hardware specific
+                    print(f"[A4988] PWM operation failed ({exc}), falling back to software stepping")
+                    self.pwm = None
+                    for _ in range(steps):
+                        self.step()
+            else:
+                for _ in range(steps):
+                    self.step()
+        finally:
+            self.enable_driver(False)
 
         # Track the current position so that :meth:`get_current_angle` works in
         # simulation mode as well.
@@ -224,10 +317,17 @@ class A4988:
     def close(self) -> None:
         """Release the GPIO pins used by the driver."""
 
+        if self.pwm is not None:
+            try:
+                self.pwm.stop()
+            except Exception:  # pragma: no cover - hardware specific
+                pass
+        self.enable_driver(False)
         GPIO.cleanup(self.ms_pins)
         GPIO.cleanup(self.dir_pin)
         GPIO.cleanup(self.step_pin)
+        if self.enable_pin is not None:
+            GPIO.cleanup(self.enable_pin)
 
 
 __all__ = ["A4988"]
-

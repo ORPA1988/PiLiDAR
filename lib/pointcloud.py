@@ -1,166 +1,166 @@
-import numpy as np
-import open3d as o3d
-import pye57
-import copy
+"""Utilities to process PiLiDAR data using NumPy point clouds."""
+
+from __future__ import annotations
+
+import math
+import os
+import pickle
+import threading
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Sequence, Tuple
+
 import cv2
 import matplotlib
-import threading
-import os
-from scipy.spatial.transform import Rotation as R
-import pickle
+import numpy as np
+from scipy.spatial import cKDTree
+
+from .ros2_bridge import ROS2LidarBridge
 
 
-def get_scan_dict(z_angles, angular_list=None, cartesian_list=None, scan_id=None, device_id=None, sensor=None, hardware=None, location=None, author=None):
+@dataclass
+class NumpyPointCloud:
+    """Light-weight representation of a point cloud backed by NumPy arrays."""
+
+    points: np.ndarray
+    attributes: Dict[str, np.ndarray] = field(default_factory=dict)
+    normals: Optional[np.ndarray] = None
+
+    def copy(self) -> "NumpyPointCloud":
+        return NumpyPointCloud(
+            points=self.points.copy(),
+            attributes={name: values.copy() for name, values in self.attributes.items()},
+            normals=None if self.normals is None else self.normals.copy(),
+        )
+
+    def set_attribute(self, name: str, values: np.ndarray) -> None:
+        self.attributes[name] = np.asarray(values)
+
+    def get_attribute(self, name: str) -> Optional[np.ndarray]:
+        return self.attributes.get(name)
+
+    @property
+    def colors(self) -> Optional[np.ndarray]:
+        return self.attributes.get("color")
+
+    def __len__(self) -> int:  # pragma: no cover - trivial
+        return int(self.points.shape[0])
+
+
+def get_scan_dict(
+    z_angles,
+    angular_list: Optional[Sequence] = None,
+    cartesian_list: Optional[Sequence] = None,
+    scan_id: Optional[str] = None,
+    device_id: Optional[str] = None,
+    sensor: Optional[str] = None,
+    hardware: Optional[str] = None,
+    location: Optional[str] = None,
+    author: Optional[str] = None,
+    packages: Optional[List[Dict[str, np.ndarray]]] = None,
+):
+    """Create a dictionary containing all raw LiDAR measurements."""
+
     raw_scan = {
         "header": {
-            # "creation_date": None,
-            # "modification_date": None,
             "scan_id": scan_id,
             "device_id": device_id,
             "sensor": sensor,
             "hardware": hardware,
             "location": location,
             "author": author,
-            },
+        },
         "z_angles": z_angles,
         "angular": angular_list,
-        "cartesian": cartesian_list
+        "cartesian": cartesian_list,
+        "packages": packages,
     }
     return raw_scan
 
-def save_raw_scan(path, data):
+
+def save_raw_scan(path: str, data: Dict[str, object]) -> None:
     if isinstance(data, dict):
-        with open(path, "wb") as f:
-            pickle.dump(data, f)
-
-def load_raw_scan(path):
-    with open(path, "rb") as f:
-        raw_scan = pickle.load(f)
-    return raw_scan
-
-def process_raw(config, save=True):
-
-    def get_cartesian_list(filepaths, columns="XZI", csv_delimiter=","):
-        cartesian_list = []
-        for filepath in filepaths:
-            points2d = load_pointcloud(filepath, columns, csv_delimiter, as_array=True)
-            cartesian_list.append(points2d)
-        return cartesian_list
-
-    def postprocess_3D(config, pcd, save=True):
-        # move Z offset and scale pointcloud
-        pcd = transform(pcd, translate=(0, 0, config.get("3D","Z_OFFSET")))                 # Z offset in mm
-        scene_scale = config.get("3D","SCALE")                                              # mm -> 0.001 m
-        if scene_scale !=1:
-            pcd = transform(pcd, scale=scene_scale)
+        with open(path, "wb") as file:
+            pickle.dump(data, file)
 
 
-        # ANGULAR LOOKUP ("TEXTURING")
-        if config.get("ENABLE_VERTEXCOLOUR") and os.path.exists(config.pano_path):
-            colors = angular_lookup(angular_from_cartesian(np.asarray(pcd.points)),  # angular_points
-                                    cv2.imread(config.pano_path),  # pano
-                                    scale=config.get("VERTEXCOLOUR","SCALE"), 
-                                    z_rotate=config.get("VERTEXCOLOUR","Z_ROTATE"))
-            
-            pcd.colors = o3d.utility.Vector3dVector(np.asarray(colors))
+def load_raw_scan(path: str) -> Dict[str, object]:
+    with open(path, "rb") as file:
+        return pickle.load(file)
 
-        else:  # colorize pointcloud by mapping intensities to colormap
-            pcd = colormap_pcd(pcd, gamma=1, cmap="viridis")
 
+def process_raw(config, save: bool = True) -> NumpyPointCloud:
+    """Convert raw lidar data into a NumPy based point cloud."""
+
+    if not os.path.exists(config.raw_path):
+        raise FileNotFoundError(f"Raw scan not found: {config.raw_path}")
+
+    raw_scan = load_raw_scan(config.raw_path)
+
+    points, attributes = merge_2D_points(
+        raw_scan,
+        position_offset=(0, config.get("3D", "Y_OFFSET"), 0),
+        angle_offset=config.get("LIDAR", "LIDAR_OFFSET_ANGLE"),
+        up_vector=(0, 0, 1),
+    )
+
+    pointcloud = NumpyPointCloud(points=points, attributes=attributes)
+
+    # Apply vertical offset and scale to convert from millimetres to metres.
+    pointcloud.points[:, 2] += config.get("3D", "Z_OFFSET")
+    scale = config.get("3D", "SCALE")
+    if scale != 1:
+        pointcloud.points *= scale
+
+    normal_radius = config.get("3D", "NORMAL_RADIUS")
+    if normal_radius and len(pointcloud) > 0:
+        estimate_point_normals(pointcloud, radius=normal_radius, max_nn=50)
+
+    pano_path = config.pano_path
+    if config.get("ENABLE_VERTEXCOLOUR") and os.path.exists(pano_path):
+        angular = angular_from_cartesian(pointcloud.points)
+        colors = angular_lookup(
+            angular,
+            cv2.imread(pano_path),
+            scale=config.get("VERTEXCOLOUR", "SCALE"),
+            z_rotate=config.get("VERTEXCOLOUR", "Z_ROTATE"),
+        )
+        pointcloud.set_attribute("color", colors)
+    else:
+        colormap_pcd(pointcloud, gamma=1, cmap="viridis")
+
+    if save:
+        save_pointcloud_threaded(pointcloud, config.pcd_path, ply_ascii=config.get("3D", "ASCII"))
+
+    if config.get("ENABLE_FILTERING"):
+        voxel_size = config.get("FILTERING", "VOXEL_SIZE")
+        nb_points = config.get("FILTERING", "NB_POINTS")
+        radius = config.get("FILTERING", "RADIUS")
+
+        downsampled = downsample(pointcloud, voxel_size=voxel_size)
+        filtered = filter_outliers(downsampled, nb_points=nb_points, radius=radius)
+        refined = filter_by_reference(pointcloud, filtered, radius=radius)
         if save:
-            save_pointcloud_threaded(pcd, config.pcd_path, ply_ascii=config.get("3D","ASCII"))
+            save_pointcloud_threaded(refined, config.filtered_pcd_path, ply_ascii=config.get("3D", "ASCII"))
+        pointcloud = refined
+
+    ROS2LidarBridge.get_instance(config.get("ENABLE_ROS2")).publish_pointcloud(pointcloud)
+
+    return pointcloud
 
 
-        # FILTER OUTLIER POINTS
-        if config.get("ENABLE_FILTERING"):
-            low_pcd = downsample(pcd, voxel_size=config.get("FILTERING", "VOXEL_SIZE"))
-
-            nb_points = config.get("FILTERING", "NB_POINTS")
-            radius = config.get("FILTERING", "RADIUS")
-            filtered_low_pcd = filter_outliers(low_pcd, nb_points=nb_points, radius=radius)
-
-            pcd = filter_by_reference(pcd, filtered_low_pcd, radius=radius)
-            if save:
-                save_pointcloud_threaded(pcd, config.filtered_pcd_path, ply_ascii=config.get("3D","ASCII"))    
-
-        return pcd
-
-    # load raw data dict from pickle file
-    if os.path.exists(config.raw_path):
-        # print("lidar.pkl file found:", config.raw_path)
-        raw_scan = load_raw_scan(config.raw_path)
-        
-
-        
-        array_3D = merge_2D_points(raw_scan, 
-                        position_offset=(0, config.get("3D","Y_OFFSET"), 0),     # Y offset in mm
-                        angle_offset=config.get("LIDAR","LIDAR_OFFSET_ANGLE"),   # small lidar rotation fix
-                        up_vector=(0,0,1)) 
-
-
-    # else:  # TODO remove -> npy files replaced by single pkl file
-    #     from lib.file_utils import angles_from_filenames
-
-    #     print("lidar.pkl file not found!")
-    #     filepaths, z_angles = angles_from_filenames(config.lidar_dir, name="plane", ext="npy")
-    #     print(f"{len(filepaths)} files found (min: {min(z_angles)}, max: {max(z_angles)}).")
-
-    #     print("processing 3D planes...")
-    #     cartesian_list = get_cartesian_list(filepaths)
-
-    #     raw_scan = get_scan_dict(z_angles, cartesian_list=cartesian_list)
-    #     if save:
-    #         save_raw_scan(config.raw_path, raw_scan)
-
-    #     array_3D = merge_2D_points(raw_scan, 
-    #                             position_offset=(0, config.get("3D","Y_OFFSET"), 0),     # Y offset in mm
-    #                             angle_offset=config.get("LIDAR","LIDAR_OFFSET_ANGLE"),   # small lidar rotation fix
-    #                             up_vector=(0,0,1)) 
-
-
-    normal_radius = config.get("3D","NORMAL_RADIUS")  # radius for normal estimation in mm
-    pcd = pcd_from_np(array_3D, estimate_normals=True, max_nn=50, radius=normal_radius)
-    print("\n2D->3D merge completed.")
-
-    pcd = postprocess_3D(config, pcd, save=save)
-    print("\nprocessing 3D completed.")
-    return pcd
-
-
-def create_fusion_visualizations(config, pcd, pano_path=None):
-    """Generate images that showcase the lidar data alongside the panorama.
-
-    Parameters
-    ----------
-    config:
-        Configuration instance defining output paths and dimensions.
-    pcd:
-        The processed :class:`open3d.geometry.PointCloud` generated by
-        :func:`process_raw`.
-    pano_path:
-        Optional path to a panorama image.  When ``None`` the function uses
-        ``config.pano_path``.
-
-    Returns
-    -------
-    dict
-        Dictionary containing the generated file paths.  The keys are
-        ``"lidar_projection"`` and ``"fusion"``.
-    """
+def create_fusion_visualizations(config, pointcloud: NumpyPointCloud, pano_path: Optional[str] = None):
+    """Generate images that overlay the LiDAR measurements with the panorama."""
 
     os.makedirs(config.fusion_dir, exist_ok=True)
 
     pano_path = pano_path or config.pano_path
     pano_image = cv2.imread(pano_path) if pano_path and os.path.exists(pano_path) else None
 
-    # Create a grayscale panorama using the luminance information of the
-    # reconstructed point cloud.
     pano_width = config.get("PANO", "PANO_WIDTH")
     pano_height = pano_width // 2
-    lidar_projection = get_lidar_pano(pcd, image_width=pano_width, image_height=pano_height)
+    lidar_projection = get_lidar_pano(pointcloud, image_width=pano_width, image_height=pano_height)
     cv2.imwrite(config.lidar_projection_path, lidar_projection)
 
-    # Colourise the lidar projection so that details stand out in the overlay.
     lidar_coloured = cv2.applyColorMap(lidar_projection, cv2.COLORMAP_TURBO)
 
     if pano_image is not None:
@@ -171,7 +171,6 @@ def create_fusion_visualizations(config, pcd, pano_path=None):
         )
         fusion = cv2.addWeighted(pano_resized, 0.6, lidar_coloured, 0.4, 0)
     else:
-        # Without an optical panorama we simply store the colourised lidar view.
         fusion = lidar_coloured
 
     cv2.imwrite(config.fusion_overlay_path, fusion)
@@ -182,435 +181,404 @@ def create_fusion_visualizations(config, pcd, pano_path=None):
     }
 
 
-#------------------------------------------------------------------------------------------------
-# Open3D Tensor Geometry
-
-def create_pcd_tensor(points, normals=None, colors=None, intensities=None, distances=None, write_ascii=False):
-    # Create a PointCloud Tensor object
-    pcdt = o3d.t.geometry.PointCloud()
-
-    dtype_vectors = o3d.core.Dtype.Float64  # Double precision for positions and normals
-    dtype_colors = o3d.core.Dtype.UInt8     # Unsigned 8-bit integer for colors
-
-    pcdt.point.positions = o3d.core.Tensor(points, dtype=dtype_vectors)
-
-    # all dtypes are double precision except colors
-    if normals is not None:
-        pcdt.point.normals = o3d.core.Tensor(normals, dtype=dtype_vectors)
-    if colors is not None:
-        pcdt.point.colors = o3d.core.Tensor(colors, dtype=dtype_colors)
-    if intensities is not None:
-        pcdt.point.intensities = o3d.core.Tensor(intensities, dtype=dtype_vectors)
-    if distances is not None:
-        pcdt.point.distance = o3d.core.Tensor(distances, dtype=dtype_vectors)
-    return pcdt
-
-# def visualize(pcd):
-#     # Convert tensor pointcloud to legacy and visualize it
-#     legacy_pcd = pcd.to_legacy() if isinstance(pcd, o3d.t.geometry.PointCloud) else pcd
-#     o3d.visualization.draw([legacy_pcd], show_skybox=False)
-
-# def save_pointcloud(pcd, filename, ply_ascii=False):
-#     if isinstance(pcd, o3d.t.geometry.Geometry):
-#         o3d.t.io.write_point_cloud(filename, pcd, write_ascii=ply_ascii)
-#     else:
-#         o3d.io.write_point_cloud(filename, pcd, write_ascii=ply_ascii)
-
-
-#------------------------------------------------------------------------------------------------
-# filtering
-
-def downsample(pcd, voxel_size=0.02):
-    downsampled_pcd = pcd.voxel_down_sample(voxel_size)
-    return downsampled_pcd
-
-def print_stats(pcd, txt=""):
-    bbox = pcd.get_axis_aligned_bounding_box()
-    bbox_extent = tuple(round(value, 2) for value in bbox.get_extent())
-    print(f"{txt} points: {len(pcd.points)}, bbox_extend: {bbox_extent}")
-
-def filter_outliers(pcd, nb_points=20, radius=0.5):
-    cl, ind = pcd.remove_radius_outlier(nb_points=nb_points, radius=radius)
-    filtered_pcd = pcd.select_by_index(ind)
-    return filtered_pcd
-
-def filter_by_reference(original_pcd, reference_pcd, radius=0.02):
-    original_points = np.asarray(original_pcd.points)
-
-    kdtree = o3d.geometry.KDTreeFlann(reference_pcd)
-    
-    indices_to_keep = set()
-    for i, point in enumerate(original_points):
-        [_, idx, _] = kdtree.search_radius_vector_3d(point, radius)
-        if len(idx) > 0:
-            indices_to_keep.add(i)
-    
-    filtered_pcd = original_pcd.select_by_index(list(indices_to_keep))
-    return filtered_pcd
-
-
-#------------------------------------------------------------------------------------------------
-
-def get_lidar_pano(pcd, image_width, image_height):
-    # Step 1: Extract luminance values
-    luminance = np.asarray(pcd.colors)[:, 0]  # Assuming luminance is stored in the red channel
-
-    # Step 2: Convert 3D points to angular coordinates
-    angular_points = angular_from_cartesian(np.asarray(pcd.points))
-
-    # Step 3: Map angular coordinates to image coordinates
-    image_x, image_y = get_sampling_coordinates(angular_points, (image_height, image_width))
-
-    # Step 4: Create an empty grayscale image
-    panorama = np.zeros((image_height, image_width), dtype=np.uint8)
-
-    # Step 5: Populate the grayscale image with luminance values
-    for i in range(len(image_x)):
-        x, y = image_x[i], image_y[i]
-        if 0 <= x < image_width and 0 <= y < image_height:
-            panorama[y, x] = int(luminance[i] * 255)  # Scale luminance to [0, 255]
-
-    panorama = cv2.medianBlur(panorama, 3)
-    
-    return panorama
-
-
-# colorize pointcloud using matplotlib colormap
-def colormap_pcd(pcd, cmap="viridis", gamma=2.2):
-    r = np.asarray(pcd.colors)[:, 0]
-    r_norm = (r - r.min()) / (r.max() - r.min())
-    r_corrected = r_norm**(gamma)
-    colors = matplotlib.colormaps[cmap](r_corrected)    # Map the normalized color channel to the color map
-    if colors.shape[1] == 4:
-        colors = colors[:, :3]                          # Remove the alpha channel if present
-    pcd.colors = o3d.utility.Vector3dVector(colors)
-    return pcd
-
-# load point cloud from file (3D: pcd, ply, e57 | 2D: csv, npy), return as pcd object or numpy table
-# columns parameter: "XYZ" for 3D, "XZ" for 2D vertical, "I" for intensity or "RGB" for color
-def load_pointcloud(filepath, columns="XYZI", csv_delimiter=",", as_tensor=False, as_array=False):
-    ext = os.path.splitext(filepath)[1][1:]
-
-    if ext == "pcd" or ext == "ply":
-        if as_tensor:
-            pcd = o3d.t.io.read_point_cloud(filepath)
-        else:
-            pcd = o3d.io.read_point_cloud(filepath)
-
-        if as_array:
-            return np.column_stack(np.asarray(pcd.points), np.asarray(pcd.colors) * 255)
-
-    elif ext == "e57":
-        # Create an E57 object with read mode and read data
-        e57 = pye57.E57(filepath, mode='r')
-        data = e57.read_scan_raw()
-        e57.close()
-
-        # Create a numpy array with the point cloud data
-        points = np.column_stack([data["cartesianX"], data["cartesianY"], data["cartesianZ"]])
-        colors = np.column_stack([data["colorRed"],   data["colorGreen"], data["colorBlue"]])
-
-        if as_array:
-            return np.column_stack(np.asarray(points), np.asarray(colors))
-
-        # Normalize the color values to the range [0, 1]
-        colors = colors / 255
-
-        # Create an open3d point cloud object
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(points)
-        pcd.colors = o3d.utility.Vector3dVector(colors)
-
-    elif ext == "csv":
-        array = np.loadtxt(filepath, delimiter=csv_delimiter)
-        if as_array:
-            return array
-    
-        pcd = pcd_from_np(array, columns=columns)
-
-    elif ext == 'npy':
-        array = np.load(filepath)
-        if as_array:
-            return array
-    
-        pcd = pcd_from_np(array, columns=columns)
-
-    else:
-        raise ValueError("Unsupported file type: " + ext)
-    
-    return pcd
-
-# export point cloud to file (pcd, ply, e57, csv)
-def save_pointcloud(pcd, filepath, ply_ascii=False, ply_compression=True, csv_delimiter=","):
-    # Create the directory if it does not exist
+def save_pointcloud(
+    pointcloud: NumpyPointCloud,
+    filepath: str,
+    ply_ascii: bool = True,
+    csv_delimiter: str = ",",
+) -> None:
     directory, filename = os.path.split(filepath)
     os.makedirs(directory, exist_ok=True)
 
-    # Get the file extension
-    ext = os.path.splitext(filename)[1][1:]
-
-    if ext == "pcd":
-        if isinstance(pcd, o3d.t.geometry.Geometry):
-            o3d.t.io.write_point_cloud(filepath, pcd)
-        else:
-            o3d.io.write_point_cloud(filename=filepath, pointcloud=pcd)
-    
-    elif ext == "ply":
-        if isinstance(pcd, o3d.t.geometry.Geometry):
-            o3d.t.io.write_point_cloud(filepath, pcd, write_ascii=ply_ascii, compressed=ply_compression)
-        else:
-            o3d.io.write_point_cloud(filename=filepath, pointcloud=pcd, write_ascii=ply_ascii, compressed=ply_compression)
-
-    # TODO: add support for exporting intensity and RGB colors
-    elif ext == "csv":
-        if not isinstance(pcd, np.ndarray):
-            array = np.asarray(pcd.points)
-        else:
-            array = pcd
+    ext = os.path.splitext(filename)[1][1:].lower()
+    if ext == "csv":
+        attribute_values = [values for values in pointcloud.attributes.values()]
+        array = np.column_stack([pointcloud.points] + attribute_values)
         np.savetxt(filepath, array, delimiter=csv_delimiter)
+        return
 
-    elif ext == "e57":
-        # if a single point cloud is provided, convert it to a list
-        if isinstance(pcd, list): 
-            pcd_list = pcd
-        elif isinstance(pcd, o3d.geometry.PointCloud):
-            pcd_list = [pcd]
+    if ext != "ply":
+        raise ValueError(f"Unsupported file extension: {ext}")
 
-        # Create an E57 object with write mode
-        e57 = pye57.E57(filepath, mode='w')
+    colors = pointcloud.colors
+    extra_attributes = {name: values for name, values in pointcloud.attributes.items() if name != "color"}
 
-        # Write each point cloud to the E57 file as a separate scan
-        for pcd in pcd_list:
-            # Convert open3d point cloud to numpy array
-            points = np.asarray(pcd.points)
-            colors = np.asarray(pcd.colors) * 255
+    header = [
+        "ply",
+        "format ascii 1.0" if ply_ascii else "format ascii 1.0",
+        f"element vertex {len(pointcloud)}",
+        "property float x",
+        "property float y",
+        "property float z",
+    ]
 
-            # Create a dictionary with keys for each coordinate and color
-            data_raw = {
-                "cartesianX": points[:, 0],
-                "cartesianY": points[:, 1],
-                "cartesianZ": points[:, 2],
-                "colorRed"  : colors[:, 0],
-                "colorGreen": colors[:, 1],
-                "colorBlue" : colors[:, 2]}
+    if colors is not None and colors.shape[1] == 3:
+        header.extend([
+            "property uchar red",
+            "property uchar green",
+            "property uchar blue",
+        ])
 
-            # Write the point cloud data to the E57 file
-            e57.write_scan_raw(data_raw)
-        e57.close()
-    
-    print("\nexport completed.")
+    for name, values in extra_attributes.items():
+        values = np.asarray(values)
+        if values.ndim == 1:
+            header.append(f"property float {name}")
+        else:
+            for index in range(values.shape[1]):
+                header.append(f"property float {name}_{index}")
 
-def save_pointcloud_threaded(pcd, output_path, ply_ascii=False, ply_compression=True, csv_delimiter=","):
-    export_thread = threading.Thread(target=save_pointcloud, args=(pcd, output_path, ply_ascii, ply_compression, csv_delimiter))
+    header.append("end_header")
+
+    with open(filepath, "w", encoding="utf-8") as file:
+        for line in header:
+            file.write(line + "\n")
+
+        for idx in range(len(pointcloud)):
+            row: List[str] = [
+                f"{pointcloud.points[idx, 0]:.6f}",
+                f"{pointcloud.points[idx, 1]:.6f}",
+                f"{pointcloud.points[idx, 2]:.6f}",
+            ]
+
+            if colors is not None and colors.shape[0] > idx:
+                rgb = np.clip(colors[idx] * 255, 0, 255).astype(np.uint8)
+                row.extend(str(value) for value in rgb)
+
+            for name, values in extra_attributes.items():
+                value = values[idx]
+                if np.isscalar(value):
+                    row.append(f"{float(value):.6f}")
+                elif np.asarray(value).ndim == 1:
+                    row.extend(f"{float(component):.6f}" for component in value)
+                else:
+                    row.append(f"{float(value):.6f}")
+
+            file.write(" ".join(row) + "\n")
+
+
+def save_pointcloud_threaded(pointcloud: NumpyPointCloud, output_path: str, ply_ascii: bool = True) -> None:
+    export_thread = threading.Thread(target=save_pointcloud, args=(pointcloud, output_path, ply_ascii))
     export_thread.start()
 
-# Remove rows with NaN values from a numpy array
-def remove_NaN(array):
+
+def remove_NaN(array: np.ndarray) -> np.ndarray:
+    array = np.asarray(array)
+    if array.ndim == 1:
+        return array[~np.isnan(array)]
     return array[~np.isnan(array).any(axis=1)]
 
-# estimate normals for a point cloud
-def estimate_point_normals(pcd, radius=1, max_nn=30, center=(0,0,0)):
-    KD_search_param = o3d.geometry.KDTreeSearchParamHybrid(radius=radius, max_nn=max_nn)
-    pcd.estimate_normals(search_param=KD_search_param)
-    pcd.orient_normals_towards_camera_location(camera_location=center)
-    return pcd
 
-def merge_2D_points(raw_scan, z_step=1, ccw=False, position_offset=(0,0,0), angle_offset=0, up_vector=(0,0,1)):
-    z_angles = raw_scan["z_angles"]
-    cartesian_list = raw_scan["cartesian"]
-    
-    # init result object with (X,Y,Z, intensity)
-    pointcloud = np.zeros((1, 4))
-    z_angle = 0
+def merge_2D_points(
+    raw_scan: Dict[str, object],
+    z_step: float = 1,
+    ccw: bool = False,
+    position_offset: Sequence[float] = (0, 0, 0),
+    angle_offset: float = 0,
+    up_vector: Sequence[float] = (0, 0, 1),
+) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
+    z_angles = raw_scan.get("z_angles") or []
+    cartesian_list: Sequence[np.ndarray] = raw_scan.get("cartesian") or []
 
-    for i, points2d in enumerate(cartesian_list):
-        # insert 3D Y=0 after column 0 so 2D-Y becomes 3D-Z (Z-up: image is now vertical)
-        points3d = np.insert(points2d, 1, values=0, axis=1)
+    points_3d: List[np.ndarray] = []
+    distance_list: List[np.ndarray] = []
+    intensity_list: List[np.ndarray] = []
+    angle_list: List[np.ndarray] = []
+    speed_list: List[np.ndarray] = []
+    timestamp_list: List[np.ndarray] = []
+    z_angle_list: List[np.ndarray] = []
 
-        # Use the corresponding angle from the list if provided, otherwise use the fixed angle increment
-        if z_angles is not None:
-            z_angle = z_angles[i]
+    z_angle_accumulator = 0.0
+
+    for index, plane in enumerate(cartesian_list):
+        plane = np.asarray(plane, dtype=np.float32)
+        if plane.size == 0:
+            continue
+
+        if plane.shape[1] < 3:
+            raise ValueError("Each plane must contain at least three columns")
+
+        # Legacy data only contained x, y, intensity. Fill missing columns.
+        if plane.shape[1] < 8:
+            missing = 8 - plane.shape[1]
+            plane = np.column_stack((plane, np.zeros((plane.shape[0], missing), dtype=np.float32)))
+
+        local_points = np.column_stack((plane[:, 0], np.zeros(len(plane)), plane[:, 1]))
+
+        if z_angles:
+            z_angle = float(z_angles[index])
         else:
-            if ccw:
-                z_angle -= z_step
-            else:
-                z_angle += z_step
-        
-        # rotational offset around Lidar axis (probably mechanical assembly imperfection)
-        points3d = rotate_3D(points3d, angle_offset, rotation_axis=np.array((0,1,0)))
+            z_angle_accumulator += -z_step if ccw else z_step
+            z_angle = z_angle_accumulator
 
-        # revolve around the Z-axis (up_vector) by its angle from filename
-        points3d = rotate_3D(points3d, -z_angle, translation_vector=position_offset, rotation_axis=np.array(up_vector))
-        # append to 3D scene
-        pointcloud = np.append(pointcloud, points3d, axis=0)
-    
-    # Remove rows with NaN values
-    pointcloud = remove_NaN(pointcloud)
+        rotated = rotate_3D(
+            local_points,
+            rotation_degrees=angle_offset,
+            rotation_axis=(0, 1, 0),
+        )
+        rotated = rotate_3D(
+            rotated,
+            rotation_degrees=-z_angle,
+            rotation_axis=up_vector,
+            translation_vector=position_offset,
+        )
+
+        points_3d.append(rotated)
+        distance_list.append(plane[:, 2])
+        intensity_list.append(plane[:, 3])
+        angle_list.append(plane[:, 4])
+        speed_list.append(plane[:, 5])
+        timestamp_list.append(plane[:, 6])
+        z_angle_list.append(np.full(len(plane), z_angle, dtype=np.float32))
+
+    if not points_3d:
+        return np.empty((0, 3), dtype=np.float32), {}
+
+    points = np.vstack(points_3d).astype(np.float32)
+    distances = np.concatenate(distance_list)
+    intensities = np.concatenate(intensity_list)
+    angles = np.concatenate(angle_list)
+    speeds = np.concatenate(speed_list)
+    timestamps = np.concatenate(timestamp_list)
+    z_angle_values = np.concatenate(z_angle_list)
+
+    mask = ~np.isnan(points).any(axis=1)
+    points = points[mask]
+
+    attributes = {
+        "distance": distances[mask].astype(np.float32),
+        "intensity": intensities[mask].astype(np.float32),
+        "angle": angles[mask].astype(np.float32),
+        "speed": speeds[mask].astype(np.float32),
+        "timestamp": timestamps[mask].astype(np.float32),
+        "z_angle": z_angle_values[mask].astype(np.float32),
+    }
+
+    return points, attributes
+
+
+def rotate_3D(
+    points3d: np.ndarray,
+    rotation_degrees: float,
+    translation_vector: Sequence[float] = (0, 0, 0),
+    rotation_axis: Sequence[float] = (0, 0, 1),
+) -> np.ndarray:
+    axis = np.asarray(rotation_axis, dtype=np.float64)
+    norm = np.linalg.norm(axis)
+    if norm == 0:
+        return points3d
+    axis = axis / norm
+    theta = math.radians(rotation_degrees)
+    cos_theta = math.cos(theta)
+    sin_theta = math.sin(theta)
+    ux, uy, uz = axis
+    rotation_matrix = np.array(
+        [
+            [
+                cos_theta + ux * ux * (1 - cos_theta),
+                ux * uy * (1 - cos_theta) - uz * sin_theta,
+                ux * uz * (1 - cos_theta) + uy * sin_theta,
+            ],
+            [
+                uy * ux * (1 - cos_theta) + uz * sin_theta,
+                cos_theta + uy * uy * (1 - cos_theta),
+                uy * uz * (1 - cos_theta) - ux * sin_theta,
+            ],
+            [
+                uz * ux * (1 - cos_theta) - uy * sin_theta,
+                uz * uy * (1 - cos_theta) + ux * sin_theta,
+                cos_theta + uz * uz * (1 - cos_theta),
+            ],
+        ]
+    )
+
+    translated = points3d + np.asarray(translation_vector, dtype=np.float64)
+    rotated = translated @ rotation_matrix.T
+    return rotated.astype(np.float32)
+
+
+def downsample(pointcloud: NumpyPointCloud, voxel_size: float = 0.02) -> NumpyPointCloud:
+    if len(pointcloud) == 0 or voxel_size <= 0:
+        return pointcloud.copy()
+
+    coords = np.floor(pointcloud.points / voxel_size).astype(np.int64)
+    _, unique_indices = np.unique(coords, axis=0, return_index=True)
+    unique_indices = np.sort(unique_indices)
+
+    downsampled = pointcloud.points[unique_indices]
+    attributes = {
+        name: values[unique_indices]
+        for name, values in pointcloud.attributes.items()
+    }
+
+    result = NumpyPointCloud(points=downsampled.astype(np.float32), attributes=attributes)
+    if pointcloud.normals is not None:
+        result.normals = pointcloud.normals[unique_indices]
+    return result
+
+
+def filter_outliers(pointcloud: NumpyPointCloud, nb_points: int = 20, radius: float = 0.5) -> NumpyPointCloud:
+    if len(pointcloud) == 0:
+        return pointcloud.copy()
+
+    tree = cKDTree(pointcloud.points)
+    mask = np.zeros(len(pointcloud), dtype=bool)
+    for index, point in enumerate(pointcloud.points):
+        neighbours = tree.query_ball_point(point, radius)
+        mask[index] = len(neighbours) >= nb_points
+
+    filtered_points = pointcloud.points[mask]
+    attributes = {
+        name: values[mask]
+        for name, values in pointcloud.attributes.items()
+    }
+    result = NumpyPointCloud(points=filtered_points.astype(np.float32), attributes=attributes)
+    if pointcloud.normals is not None:
+        result.normals = pointcloud.normals[mask]
+    return result
+
+
+def filter_by_reference(
+    pointcloud: NumpyPointCloud,
+    reference: NumpyPointCloud,
+    radius: float = 0.02,
+) -> NumpyPointCloud:
+    if len(pointcloud) == 0 or len(reference) == 0:
+        return pointcloud.copy()
+
+    tree = cKDTree(reference.points)
+    mask = np.zeros(len(pointcloud), dtype=bool)
+    for index, point in enumerate(pointcloud.points):
+        neighbours = tree.query_ball_point(point, radius)
+        mask[index] = len(neighbours) > 0
+
+    filtered_points = pointcloud.points[mask]
+    attributes = {
+        name: values[mask]
+        for name, values in pointcloud.attributes.items()
+    }
+    result = NumpyPointCloud(points=filtered_points.astype(np.float32), attributes=attributes)
+    if pointcloud.normals is not None:
+        result.normals = pointcloud.normals[mask]
+    return result
+
+
+def get_lidar_pano(pointcloud: NumpyPointCloud, image_width: int, image_height: int) -> np.ndarray:
+    intensity = pointcloud.get_attribute("intensity")
+    if intensity is None or len(intensity) == 0:
+        return np.zeros((image_height, image_width), dtype=np.uint8)
+
+    angular_points = angular_from_cartesian(pointcloud.points)
+    image_x, image_y = get_sampling_coordinates(angular_points, (image_height, image_width))
+
+    panorama = np.zeros((image_height, image_width), dtype=np.uint8)
+    values = np.clip(intensity, 0, 255).astype(np.uint8)
+    panorama[image_y, image_x] = values
+    panorama = cv2.medianBlur(panorama, 3)
+    return panorama
+
+
+def colormap_pcd(pointcloud: NumpyPointCloud, cmap: str = "viridis", gamma: float = 2.2) -> NumpyPointCloud:
+    intensity = pointcloud.get_attribute("intensity")
+    if intensity is None or len(intensity) == 0:
+        colors = np.zeros((len(pointcloud), 3), dtype=np.float32)
+        pointcloud.set_attribute("color", colors)
+        return pointcloud
+
+    intensities = np.asarray(intensity, dtype=np.float32)
+    min_val = intensities.min()
+    max_val = intensities.max()
+    if max_val - min_val < 1e-9:
+        normalized = np.zeros_like(intensities)
+    else:
+        normalized = (intensities - min_val) / (max_val - min_val)
+    corrected = np.power(normalized, gamma)
+    colors = matplotlib.colormaps[cmap](corrected)
+    if colors.shape[1] == 4:
+        colors = colors[:, :3]
+    pointcloud.set_attribute("color", colors.astype(np.float32))
     return pointcloud
 
-# convert numpy array to open3d point cloud
-# supports 2D and 3D points, intensity and RGB colors or pcd objects (pcd.points and pcd.colors)
-def pcd_from_np(array, columns="XYZI", estimate_normals=True, colors=None, radius=10, max_nn=30):
-    pcd = o3d.geometry.PointCloud()
 
-    # Convert the pointcloud and colors to numpy arrays if they are not already
-    # TODO: merged from another version -> check if it's still valid
-    if not isinstance(array, np.ndarray):
-        array = np.asarray(array)
-    if colors is not None and not isinstance(colors, np.ndarray):
-        colors = np.asarray(colors)
+def estimate_point_normals(
+    pointcloud: NumpyPointCloud,
+    radius: float = 1.0,
+    max_nn: int = 30,
+    center: Sequence[float] = (0, 0, 0),
+) -> NumpyPointCloud:
+    if len(pointcloud) == 0:
+        return pointcloud
 
-    columns = columns.upper()
-    zeros = np.zeros((array.shape[0], 1))
+    tree = cKDTree(pointcloud.points)
+    normals = np.zeros_like(pointcloud.points)
+    center = np.asarray(center, dtype=np.float32)
 
-    # 3D points
-    if "XYZ" in columns:
-        points = array[:, 0:3]
-        pcd.points = o3d.utility.Vector3dVector(points)
-        color_i = 3
+    for index, point in enumerate(pointcloud.points):
+        indices = tree.query_ball_point(point, radius)
+        if len(indices) < 3:
+            normals[index] = np.array([0.0, 0.0, 1.0], dtype=np.float32)
+            continue
+        if len(indices) > max_nn:
+            indices = indices[:max_nn]
+        neighbours = pointcloud.points[indices]
+        mean = neighbours.mean(axis=0)
+        centred = neighbours - mean
+        covariance = centred.T @ centred / max(len(indices), 1)
+        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+        normal = eigenvectors[:, np.argmin(eigenvalues)]
+        if np.dot(normal, point - center) > 0:
+            normal = -normal
+        normals[index] = normal
 
-     # 2D points
-    else:
-        color_i = 2
-        if "XY" in columns:
-            pcd.points = o3d.utility.Vector3dVector(np.hstack((array[:, 0:2], zeros)))
-        elif "XZ" in columns:
-            pcd.points = o3d.utility.Vector3dVector(np.hstack((array[:, 0:1], zeros, array[:, 1:2])))
-        elif "YZ" in columns:
-            pcd.points = o3d.utility.Vector3dVector(np.hstack((zeros, array[:, 0:2])))
-        else:
-            raise ValueError("Unsupported point cloud type: " + type(array))
-    
-    if estimate_normals:
-        pcd = estimate_point_normals(pcd, radius=radius, max_nn=max_nn)
-
-    # colors
-    if "I" in columns:  # ext == "XYZI" -> array.shape[1] == 4:
-        intensities = array[:, color_i] / 255  # normalize intensity values
-
-        # convert intensity to RGBA color
-        pcd.colors = o3d.utility.Vector3dVector(np.column_stack([intensities, intensities, intensities]))
-
-    elif "RGB" in columns:
-        pcd.colors = o3d.utility.Vector3dVector(array[:, color_i:color_i+3] / 255)
-    
-    elif colors is not None:
-        pcd.colors = o3d.utility.Vector3dVector(colors)
-
-    return pcd
+    pointcloud.normals = normals.astype(np.float32)
+    return pointcloud
 
 
-#------------------------------------------------------------------------------------------------
-# Transformation functions
+def transform(
+    pointcloud: NumpyPointCloud,
+    transformation: Optional[np.ndarray] = None,
+    translate: Optional[Sequence[float]] = None,
+    scale: Optional[float] = None,
+    euler_rotate_deg: Optional[Sequence[float]] = None,
+    pivot: Sequence[float] = (0, 0, 0),
+) -> NumpyPointCloud:
+    result = pointcloud.copy()
 
-def rotate_3D(points3d, rotation_degrees, translation_vector=(0,0,0), rotation_axis=(0,0,1)):
-    rotation_axis = np.array(rotation_axis)
-
-    rotation_radians = np.radians(rotation_degrees)
-    rotation_vector = rotation_radians * rotation_axis
-    rotation = R.from_rotvec(rotation_vector)
-    rotation_matrix = rotation.as_matrix()
-    pcd = o3d.geometry.PointCloud()
-
-    pcd.points = o3d.utility.Vector3dVector(points3d[:, 0:3])  # column 4 are intensities 
-
-    if points3d.shape[1] == 4:
-        intensities = points3d[:, 3]
-        colors = np.stack([intensities]*3, axis=-1)
-        pcd.colors = o3d.utility.Vector3dVector(colors)
-
-    # Perform translation before rotation, adjusting Y based on translation and initial Z
-    pcd.translate(translation_vector)
-    # pcd.points[:, 1] += pcd.points[:, 2] * translation_vector[1]  # Update Y based on translation and Z
-
-    # Rotate the point cloud using the rotation matrix
-    pcd.rotate(rotation_matrix, center=(0, 0, 0))
-
-    # Convert the point cloud back to a NumPy array
-    result_points = np.asarray(pcd.points)
-
-    # Reattach intensity column if provided
-    if points3d.shape[1] == 4:
-        result_points = np.column_stack((result_points, points3d[:, 3]))
-
-    return result_points
-
-# def rotate_3D_np(points3d, rotation_axis, rotation_degrees):
-#     """ Rotate a vector v about axis by taking the component of v perpendicular to axis,
-#     rotating it theta in the plane perpendicular to axis, 
-#     then add the component of v parallel to axis.
-
-#     Let a be a unit vector along an axis axis. Then a = axis/norm(axis).
-#     Let A = I x a, the cross product of a with an identity matrix I.
-#     Then exp(theta,A) is the rotation matrix.
-#     Finally, dotting the rotation matrix with the vector will rotate the vector.
-
-#     https://www.kite.com/python/answers/how-to-rotate-a-3d-vector-about-an-axis-in-python
-#     https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.transform.Rotation.html
-#     """
-#     rotation_radians = np.radians(rotation_degrees)
-#     rotation_vector = rotation_radians * rotation_axis
-#     rotation = R.from_rotvec(rotation_vector)
-
-#     # rotation_matrix = rotation.as_matrix()
-#     # return np.dot(points3d[:, 0:3], rotation_matrix.T)
-
-#     result_points = points3d.copy()
-#     if points3d.shape[1] == 4:
-#         # remove intensity column
-#         points3d = np.delete(points3d, -1, axis=1)
-#     # apply rotation to each point
-#     for i, point in enumerate(points3d):
-#         result_points[i][0:3] = rotation.apply(point)
-#     return result_points
-
-# extract translation and rotation vectors from transformation matrix
-def get_transform_vectors(transform_M):
-    # Extract translation (top-right 3x1 sub-matrix)
-    translation = transform_M[:3, 3]
-
-    # Extract rotation (top-left 3x3 sub-matrix), make a copy to avoid read only error
-    rotation_M = np.array(transform_M[:3, :3])
-    # Convert rotation matrix to Euler angles
-    r = R.from_matrix(rotation_M)
-    euler_angles = r.as_euler('xyz', degrees=True)
-
-    return translation, euler_angles
-
-# apply translation and rotation to open3d point cloud
-def transform(pcd, transformation=None, translate=None, scale=None, euler_rotate_deg=None, pivot=(0,0,0)):
-    pcd_temp = copy.deepcopy(pcd)
-    
     if transformation is not None:
-        pcd_temp.transform(transformation)
-    
+        matrix = np.asarray(transformation, dtype=np.float64)
+        homogenous = np.column_stack((result.points, np.ones(len(result))))
+        transformed = homogenous @ matrix.T
+        result.points = transformed[:, :3].astype(np.float32)
+
     if translate is not None:
-        pcd_temp.translate(translate)
+        result.points += np.asarray(translate, dtype=np.float32)
 
     if euler_rotate_deg is not None:
-        euler_rotate_rad = np.deg2rad(euler_rotate_deg)
-        rotation_matrix = pcd_temp.get_rotation_matrix_from_xyz(euler_rotate_rad)
-        pcd_temp.rotate(rotation_matrix, center=pivot)
-    
+        angles = np.deg2rad(np.asarray(euler_rotate_deg, dtype=np.float64))
+        rx, ry, rz = angles
+        Rx = np.array([[1, 0, 0], [0, math.cos(rx), -math.sin(rx)], [0, math.sin(rx), math.cos(rx)]])
+        Ry = np.array([[math.cos(ry), 0, math.sin(ry)], [0, 1, 0], [-math.sin(ry), 0, math.cos(ry)]])
+        Rz = np.array([[math.cos(rz), -math.sin(rz), 0], [math.sin(rz), math.cos(rz), 0], [0, 0, 1]])
+        rotation_matrix = Rz @ Ry @ Rx
+        pivot_vec = np.asarray(pivot, dtype=np.float32)
+        result.points = (result.points - pivot_vec) @ rotation_matrix.T + pivot_vec
+
     if scale is not None:
-        pcd_temp.scale(scale, center=pivot)
+        pivot_vec = np.asarray(pivot, dtype=np.float32)
+        result.points = (result.points - pivot_vec) * scale + pivot_vec
 
-    return pcd_temp
+    return result
 
 
-#------------------------------------------------------------------------------------------------
-# pointcloud Lookup
-
-def angular_from_cartesian(cartesian_points):
-    r = np.sqrt(np.sum(cartesian_points**2, axis=1)) + 1e-10  # hack: avoid division by zero
+def angular_from_cartesian(cartesian_points: np.ndarray) -> np.ndarray:
+    r = np.sqrt(np.sum(cartesian_points**2, axis=1)) + 1e-10
     theta = np.arccos(cartesian_points[:, 2] / r)
     phi = np.arctan2(cartesian_points[:, 1], cartesian_points[:, 0])
-    angular_points = np.stack([theta, r, phi], axis=1)
-    return angular_points
+    return np.stack([theta, r, phi], axis=1)
 
-def get_sampling_coordinates(angular_points, img_shape, z_rotate=0):
+
+def get_sampling_coordinates(angular_points: np.ndarray, img_shape: Tuple[int, int], z_rotate: float = 0):
     image_height, image_width = img_shape
- 
+
     longitude = angular_points[:, 2] + np.deg2rad(90 + z_rotate)
     longitude = (longitude + 2 * np.pi) % (2 * np.pi)
     image_x = (2 * np.pi - longitude) / (2 * np.pi) * image_width
@@ -625,48 +593,57 @@ def get_sampling_coordinates(angular_points, img_shape, z_rotate=0):
 
     return image_x, image_y
 
-def angular_lookup(angular_points, pano, scale=1, degrees=False, z_rotate=0, as_float=True):
+
+def angular_lookup(
+    angular_points: np.ndarray,
+    pano: np.ndarray,
+    scale: float = 1,
+    degrees: bool = False,
+    z_rotate: float = 0,
+    as_float: bool = True,
+):
     if degrees:
-        angular_points = np.deg2rad(angular_points)  # degrees to radians
+        angular_points = np.deg2rad(angular_points)
+
+    if pano is None:
+        return np.zeros((angular_points.shape[0], 3), dtype=np.float32)
 
     image_height, image_width, _ = pano.shape
-    pano_RGB = cv2.cvtColor(pano, cv2.COLOR_BGR2RGB)
+    pano_rgb = cv2.cvtColor(pano, cv2.COLOR_BGR2RGB)
 
     if scale != 1:
         image_height = int(image_height * scale)
-        image_width = int(image_height * 2)  # spherical map aspect ratio is 2:1
-        pano_RGB = cv2.resize(pano_RGB, (image_width, image_height), interpolation=cv2.INTER_AREA)
-    
+        image_width = int(image_height * 2)
+        pano_rgb = cv2.resize(pano_rgb, (image_width, image_height), interpolation=cv2.INTER_AREA)
+
     image_x, image_y = get_sampling_coordinates(angular_points, (image_height, image_width), z_rotate=z_rotate)
-    colors = pano_RGB[image_y, image_x]
+    colors = pano_rgb[image_y, image_x]
 
     if as_float:
         colors = colors.astype(np.float32) / 255
     return colors
 
 
-if __name__ == "__main__":
-    '''
-    generate lidar_panorama from raw data
-    '''
-
-    from config import Config
-    from visualization import visualize
-
-    scan_id = "240824-1230"
-
-    config = Config()
-    config.init(scan_id=scan_id)
-    config.set(False, "ENABLE_VERTEXCOLOUR")
-
-    pano = cv2.imread(config.pano_path)
-
-    pcd = load_pointcloud(config.pcd_path)
-
-    # CREATE PANORAMA FROM LUMINANCE
-    lidar_pano = get_lidar_pano(pcd, image_width=2048, image_height=1024)
-    cv2.imwrite(os.path.join(config.scan_dir, f'{config.scan_id}_lidar.jpg'), lidar_pano)
-    cv2.imshow("Pano from Lidar data", lidar_pano)
-    cv2.waitKey(0)
-
-    visualize([pcd], view="front", unlit=True)
+__all__ = [
+    "NumpyPointCloud",
+    "angular_from_cartesian",
+    "angular_lookup",
+    "colormap_pcd",
+    "create_fusion_visualizations",
+    "downsample",
+    "estimate_point_normals",
+    "filter_by_reference",
+    "filter_outliers",
+    "get_lidar_pano",
+    "get_sampling_coordinates",
+    "get_scan_dict",
+    "load_raw_scan",
+    "merge_2D_points",
+    "process_raw",
+    "remove_NaN",
+    "rotate_3D",
+    "save_pointcloud",
+    "save_pointcloud_threaded",
+    "save_raw_scan",
+    "transform",
+]

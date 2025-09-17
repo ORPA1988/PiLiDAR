@@ -15,6 +15,7 @@ try:
     from lib.platform_utils import init_serial
     from lib.file_utils import save_data
     from lib.config import format_value
+    from lib.ros2_bridge import ROS2LidarBridge
 
 # testing from this file
 except:
@@ -23,6 +24,7 @@ except:
     from platform_utils import init_serial
     from file_utils import save_data
     from config import format_value
+    from ros2_bridge import ROS2LidarBridge
 
 
 class Lidar:
@@ -32,7 +34,7 @@ class Lidar:
         self.sampling_rate      = config.get("LIDAR", config.DEVICE, "SAMPLING_RATE")
         self.raw_path           = config.raw_path
 
-        self.z_angle            = None  # gets updated externally by A4988 driver
+        self.z_angle            = 0.0  # gets updated externally by A4988 driver
 
         # constants
         self.start_byte         = bytes([0x54])
@@ -65,7 +67,7 @@ class Lidar:
         self.out_i              = 0
         self.speeds             = np.empty(self.out_len, dtype=self.dtype)
         self.timestamps         = np.empty(self.out_len, dtype=self.dtype)
-        self.points_2d          = np.empty((self.out_len * self.dlength, 3), dtype=self.dtype)  # [[x, y, l],[..
+        self.points_2d          = np.empty((self.out_len * self.dlength, 8), dtype=self.dtype)
 
         
         # self.data_dir           = config.lidar_dir  # TODO remove -> npy files replaced by single pkl file
@@ -73,13 +75,11 @@ class Lidar:
         # raw output
         self.z_angles           = []
         self.cartesian_list     = []
+        self.raw_packages       = []
 
         # visualization
         self.visualization      = visualization
-        
-
-
-        self.pwm = None
+        self.ros2_bridge        = ROS2LidarBridge.get_instance(config.get("ENABLE_ROS2"), frame_id="pilidar_lidar")
     
 
     def close(self):
@@ -103,29 +103,8 @@ class Lidar:
         
         while self.serial_connection.is_open and (max_packages is None or loop_count <= max_packages):
             try:
-                if self.out_i == self.out_len:
-                    if callback is not None:
-                        callback()
-                    
-                    # save the z_angle to list
-                    self.z_angles.append(self.z_angle)
-
-                    if self.verbose:
-                        print("speed:", round(self.speed, 2))
-                        if self.z_angle is not None:
-                            print("z_angle:", round(self.z_angle, 2))
-
-                    # Append 2D plane to cartesian list. copying avoids identical pointers
-                    self.cartesian_list.append(np.copy(self.points_2d))
-
-                    # VISUALIZE
-                    if self.visualization is not None:
-                        self.visualization.update(self.points_2d)
-
-                    self.out_i = 0
-
                 self.read()
-                
+
 
             except serial.SerialException:
                 print("SerialException")
@@ -133,6 +112,25 @@ class Lidar:
 
             self.out_i += 1
             loop_count += 1
+
+            if self.out_i == self.out_len:
+                self._finalize_plane()
+                if callback is not None:
+                    callback()
+                self.out_i = 0
+
+
+    def _finalize_plane(self):
+        plane = np.copy(self.points_2d)
+        self.cartesian_list.append(plane)
+        self.z_angles.append(self.z_angle)
+
+        if self.verbose:
+            print("speed:", round(self.speed, 2))
+            print("z_angle:", round(self.z_angle, 2))
+
+        if self.visualization is not None:
+            self.visualization.update(plane)
 
 
     def read(self):
@@ -171,12 +169,44 @@ class Lidar:
         self.decode(self.byte_array)
         # convert polar to cartesian
         x_package, y_package = self.polar2cartesian(self.angle_package, self.distance_package, self.offset)
-        points_package = np.column_stack((x_package, y_package, self.luminance_package)).astype(self.dtype)
-        
+
+        distances = self.distance_package.astype(self.dtype)
+        intensities = self.luminance_package.astype(self.dtype)
+        angles = self.angle_package.astype(self.dtype)
+        speeds = np.full(self.dlength, self.speed, dtype=self.dtype)
+        timestamps = np.full(self.dlength, self.timestamp, dtype=self.dtype)
+        z_angles = np.full(self.dlength, self.z_angle, dtype=self.dtype)
+
+        points_package = np.column_stack(
+            (
+                x_package.astype(self.dtype),
+                y_package.astype(self.dtype),
+                distances,
+                intensities,
+                angles,
+                speeds,
+                timestamps,
+                z_angles,
+            )
+        )
+
         # write into preallocated output arrays at current index
+        start_index = self.out_i * self.dlength
+        end_index = (self.out_i + 1) * self.dlength
         self.speeds[self.out_i] = self.speed
         self.timestamps[self.out_i] = self.timestamp
-        self.points_2d[self.out_i*self.dlength:(self.out_i+1)*self.dlength] = points_package
+        self.points_2d[start_index:end_index] = points_package
+
+        package_info = {
+            "timestamp": self.timestamp,
+            "speed": self.speed,
+            "angles": np.copy(self.angle_package),
+            "distances": np.copy(self.distance_package),
+            "intensity": np.copy(self.luminance_package),
+            "z_angle": self.z_angle,
+        }
+        self.raw_packages.append(package_info)
+        self.ros2_bridge.publish_raw_package(package_info)
 
         # reset byte_array
         self.byte_array = bytearray()

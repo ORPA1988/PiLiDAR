@@ -4,6 +4,7 @@
 
     "ENABLE_PANO": true,
     "ENABLE_3D": true,
+    "ENABLE_ROS2": false,
 
     "ENABLE_VERTEXCOLOUR": true,
     "ENABLE_FILTERING": false,
@@ -41,6 +42,7 @@
         "pins": {
             "DIR_PIN": 26,
             "STEP_PIN": 19,
+            "ENABLE_PIN": 17,
             "MS_PINS": [5, 6, 13]
         },
         "RELAY_PIN": 24,
@@ -50,7 +52,13 @@
         "STEP_DELAY": 0.0005,
         "SCAN_DELAY": 0.08,
         "STEPPER_RES": 200,
-        "STEP_ANGLE": null
+        "STEP_ANGLE": null,
+        "PWM": {
+            "CHANNEL": 1,
+            "FREQUENCY": 2000,
+            "DUTY_CYCLE": 50.0,
+            "PULSE_WIDTH": 0.0001
+        }
     },
 
     "CAM": {

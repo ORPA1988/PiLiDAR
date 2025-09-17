@@ -29,6 +29,7 @@ from lib.pointcloud import (
     process_raw,
     save_raw_scan,
 )
+from lib.ros2_bridge import ROS2LidarBridge
 from lib.rpicam_utils import take_HDR_photo, estimate_camera_parameters
 from lib.pano_utils import hugin_stitch
 from lib.simulation import run_simulation_capture
@@ -64,6 +65,11 @@ def initialize_stepper(config: Config) -> Optional[A4988]:
             step_angle=config.get("STEPPER", "STEP_ANGLE"),
             microsteps=config.get("STEPPER", "MICROSTEPS"),
             gear_ratio=config.get("STEPPER", "GEAR_RATIO"),
+            enable_pin=config.get("STEPPER", "pins", "ENABLE_PIN"),
+            pwm_channel=config.get("STEPPER", "PWM", "CHANNEL"),
+            pwm_frequency=config.get("STEPPER", "PWM", "FREQUENCY"),
+            pwm_duty_cycle=config.get("STEPPER", "PWM", "DUTY_CYCLE"),
+            pulse_width=config.get("STEPPER", "PWM", "PULSE_WIDTH"),
         )
     except Exception as error:  # pragma: no cover - hardware specific
         print("\n[WARNUNG] Der Schrittmotor konnte nicht initialisiert werden:")
@@ -153,6 +159,8 @@ def capture_lidar_scan(config: Config, stepper: Optional[A4988], lidar: Optional
         stepper.move_steps(config.steps if config.SCAN_ANGLE > 0 else -config.steps)
         lidar.z_angle = stepper.get_current_angle()
 
+    lidar.z_angle = stepper.get_current_angle()
+
     if not config.get("ENABLE_CAM"):
         sleep(2)  # allow the lidar motor to stabilise
 
@@ -166,7 +174,11 @@ def capture_lidar_scan(config: Config, stepper: Optional[A4988], lidar: Optional
 
     stepper.move_to_angle(0)
 
-    raw_scan = get_scan_dict(lidar.z_angles, cartesian_list=lidar.cartesian_list)
+    raw_scan = get_scan_dict(
+        lidar.z_angles,
+        cartesian_list=lidar.cartesian_list,
+        packages=lidar.raw_packages,
+    )
     save_raw_scan(lidar.raw_path, raw_scan)
     return True
 
@@ -180,6 +192,7 @@ def finalize_hardware(config: Config, lidar: Optional[Lidar], stepper: Optional[
     if stepper is not None:
         stepper.close()
     config.relay_off()
+    ROS2LidarBridge.shutdown_global()
 
 
 def main() -> None:
@@ -252,4 +265,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
