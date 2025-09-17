@@ -1,64 +1,67 @@
-# flake8: noqa
-'''
-SCAN_ANGLE: # 180° CW or -180° CCW
-GEAR_RATIO: 3.7142857 = 1 + 38/14
-STEP_ANGLE: 1.8 = 360° / STEPPER_RES
-TARGET_RES: 1/6 = 0.1666667°
-OFFSET: 90° -> np.pi / 2
-'''
+"""Configuration helper for the PiLiDAR project.
 
+The :class:`Config` class reads :mod:`config.json`, keeps frequently used
+values accessible and prepares the directory structure for every scan.  Plenty
+of inline comments explain each step so beginners understand what happens when
+the code is executed.
+"""
+
+from __future__ import annotations
+
+import datetime
 import json
 import os
-import datetime
 from typing import Optional
-# import subprocess
 
 try:
     from lib.file_utils import make_dir
     from lib.platform_utils import get_platform, allow_serial
-except:
-    from file_utils import make_dir
-    from platform_utils import get_platform, allow_serial
+except Exception:  # pragma: no cover - fallback for direct module execution
+    from file_utils import make_dir  # type: ignore
+    from platform_utils import get_platform, allow_serial  # type: ignore
 
 
+GPIO = None
 platform = get_platform()
-if platform == 'RaspberryPi':
-    # os.environ['LG_WD'] = '/tmp'  # set LGPIO tmp directory
+if platform == 'RaspberryPi':  # pragma: no cover - executed on the real device
     os.environ.setdefault("RPI_LGPIO_REVISION", "0xa020d3")
     import RPi.GPIO as GPIO  # type: ignore
 
 
 class Config:
     def __init__(self, file_path: str = "config.json", scans_root: Optional[str] = None):
-        self.base_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__))) # ../config.json
+        # ``base_dir`` is the project root directory.  All relative paths inside
+        # ``config.json`` are resolved against it so that the code works no
+        # matter from where it is launched.
+        self.base_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
 
         # load config.json
-        with open(os.path.join(self.base_dir, file_path), 'r') as file:
+        with open(os.path.join(self.base_dir, file_path), 'r', encoding='utf-8') as file:
             self.dict = json.load(file)
 
-        # set scans_root if provided, else use config.json
+        # ``scans_root`` can be overridden for unit tests.  When no override is
+        # provided we read the value from the configuration file.
         if scans_root is not None:
             self.set(scans_root, "SCANS_ROOT")
         self.scans_root = os.path.join(self.base_dir, self.get("SCANS_ROOT"))
-        
-        # write hex strings back to dict:
+        make_dir(self.scans_root)
+
+        # protocol settings contain hexadecimal values that are stored as
+        # strings in JSON.  We convert them to raw bytes right away.
         protocol = self.dict["LIDAR"]["protocol"]
-        # start_byte
         start_byte = bytes.fromhex(protocol["start_byte"])
         self.set(start_byte, "LIDAR", "protocol", "start_byte")
-        # dlength_byte
         dlength_byte = bytes.fromhex(protocol["dlength_byte"])
         self.set(dlength_byte, "LIDAR", "protocol", "dlength_byte")
 
-        # CRC_TABLE
         crc_path = os.path.join(self.base_dir, self.get("LIDAR", "protocol", "CRC_PATH"))
-        with open(crc_path, 'r') as file:
+        with open(crc_path, 'r', encoding='utf-8') as file:
             crc_table = json.load(file)["CRC_TABLE"]
         self.crc_table = [int(hex_str, 16) for hex_str in crc_table]
         self.set(self.crc_table, "LIDAR", "protocol", "CRC_TABLE")
-        
-        
+
         self.platform = get_platform()
+        self.GPIO = GPIO
         self.set_device(self.get("LIDAR", "DEVICE"))
         
         
@@ -103,19 +106,31 @@ class Config:
             self.scan_id = scan_id
         else:
             self.scan_id = datetime.datetime.now().strftime("%y%m%d-%H%M")
-        
-        self.scan_dir           = os.path.join(self.scans_root, self.scan_id)
-        self.pto_path           = os.path.join(self.scan_dir, f'{self.scan_id}.pto')
-        self.pano_path          = os.path.join(self.scan_dir, f'{self.scan_id}{self.get("PANO", "OUTPUT_NAME")}')
-        self.raw_path           = os.path.join(self.scan_dir, f"{self.scan_id}{self.get('LIDAR', 'RAW_NAME')}")
-        self.pcd_path           = os.path.join(self.scan_dir, f'{self.scan_id}.{self.get("3D", "EXT")}')            # .pcd, .ply, .xyz, .xyzrgb
-        self.filtered_pcd_path  = os.path.join(self.scan_dir, f'{self.scan_id}_filtered.{self.get("3D", "EXT")}')
 
-        self.lidar_dir = os.path.join(self.scan_dir, "lidar")         # TODO remove -> npy files replaced by single pkl file
-        
-        self.img_dir   = make_dir(os.path.join(self.scan_dir, "img"))
-        self.tmp_dir   = make_dir(os.path.join(self.scan_dir, "tmp"))
-        
+        # Prepare the directory structure for the current scan.  ``make_dir``
+        # silently ignores existing folders so re-running the pipeline is safe.
+        self.scan_dir = make_dir(os.path.join(self.scans_root, self.scan_id))
+        self.img_dir = make_dir(os.path.join(self.scan_dir, "img"))
+        self.tmp_dir = make_dir(os.path.join(self.scan_dir, "tmp"))
+        self.logs_dir = make_dir(os.path.join(self.scan_dir, "logs"))
+
+        # File destinations of the generated assets.
+        self.pto_path = os.path.join(self.scan_dir, f'{self.scan_id}.pto')
+        self.pano_path = os.path.join(self.scan_dir, f'{self.scan_id}{self.get("PANO", "OUTPUT_NAME")}')
+        self.raw_path = os.path.join(self.scan_dir, f"{self.scan_id}{self.get('LIDAR', 'RAW_NAME')}")
+
+        ext = self.get("3D", "EXT")
+        intensity_suffix = self.get("3D", "INTENSITY_SUFFIX", default="_intensity")
+        color_suffix = self.get("3D", "COLOR_SUFFIX", default="_vertex")
+        self.intensity_pcd_path = os.path.join(self.scan_dir, f'{self.scan_id}{intensity_suffix}.{ext}')
+        self.pcd_path = self.intensity_pcd_path  # backwards compatible alias
+        self.vertex_pcd_path = os.path.join(self.scan_dir, f'{self.scan_id}{color_suffix}.{ext}')
+        self.filtered_pcd_path = os.path.join(self.scan_dir, f'{self.scan_id}_filtered.{ext}')
+
+        # legacy directory kept for backwards compatibility with earlier data
+        # dumps.
+        self.lidar_dir = make_dir(os.path.join(self.scan_dir, "lidar"))
+
         self.imglist = []
 
 
@@ -128,6 +143,10 @@ class Config:
         self.BAUDRATE = self.get("LIDAR", self.DEVICE , "BAUDRATE")
         self.PORT = self.get("LIDAR", self.DEVICE , "PORT")
 
+        self.lidar_power_pin = self.get("LIDAR", "POWER_PIN", default=None)
+        self.lidar_start_command = self.get("LIDAR", "MOTOR_START_COMMAND", default="1")
+        self.lidar_stop_command = self.get("LIDAR", "MOTOR_STOP_COMMAND", default="0")
+
         if self.platform == 'RaspberryPi':
             print("Platform: Raspberry Pi")
 
@@ -137,7 +156,7 @@ class Config:
             self.gpio_setup()  # enable GPIO Ports
 
             self.PORT = self.get("LIDAR", self.DEVICE , "PORT")
-            
+
             # disable filtering on Raspberry Pi as it is computationally too expensive
             if not self.get("FILTERING", "FILTER_ON_PI"):
                 self.set(False, "ENABLE_FILTERING")
@@ -146,10 +165,15 @@ class Config:
             self.PORT = self.get("LIDAR", self.DEVICE , "PORT_WIN")
 
 
-    def get(self, *args):
+    def get(self, *args, default=None):
         value = self.dict
-        for key in args:
-            value = value[key]
+        try:
+            for key in args:
+                value = value[key]
+        except KeyError:
+            if default is not None:
+                return default
+            raise
         return value
     
     def set(self, value, *args):
@@ -191,23 +215,41 @@ class Config:
         if stepper_res <= 0:
             raise ValueError("STEPPER_RES must be positive")
 
-    def gpio_setup(self, debug=False):
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(debug)
+    def has_gpio(self) -> bool:
+        return self.GPIO is not None
+
+    def gpio_setup(self, debug: bool = False):
+        if not self.has_gpio():
+            return
+
+        self.GPIO.setmode(self.GPIO.BCM)
+        self.GPIO.setwarnings(debug)
 
         # power relay
         self.relay_pin = self.get("STEPPER", "RELAY_PIN")
-        GPIO.setup(self.relay_pin, GPIO.OUT)
-        GPIO.output(self.relay_pin, GPIO.HIGH)  # enable power
+        self.GPIO.setup(self.relay_pin, self.GPIO.OUT)
+        self.GPIO.output(self.relay_pin, self.GPIO.HIGH)  # enable power
+
+        if self.lidar_power_pin is not None:
+            self.GPIO.setup(self.lidar_power_pin, self.GPIO.OUT)
+            self.GPIO.output(self.lidar_power_pin, self.GPIO.LOW)
 
     def relay_on(self):
-        if hasattr(self, "relay_pin"):
-            GPIO.output(self.relay_pin, GPIO.HIGH)
+        if hasattr(self, "relay_pin") and self.has_gpio():
+            self.GPIO.output(self.relay_pin, self.GPIO.HIGH)
 
     def relay_off(self):
-        if hasattr(self, "relay_pin"):
-            GPIO.output(self.relay_pin, GPIO.LOW)
-            GPIO.cleanup(self.relay_pin)
+        if hasattr(self, "relay_pin") and self.has_gpio():
+            self.GPIO.output(self.relay_pin, self.GPIO.LOW)
+            self.GPIO.cleanup(self.relay_pin)
+
+    def lidar_power_on(self):
+        if self.lidar_power_pin is not None and self.has_gpio():
+            self.GPIO.output(self.lidar_power_pin, self.GPIO.HIGH)
+
+    def lidar_power_off(self):
+        if self.lidar_power_pin is not None and self.has_gpio():
+            self.GPIO.output(self.lidar_power_pin, self.GPIO.LOW)
 
 
 def format_value(value, digits):

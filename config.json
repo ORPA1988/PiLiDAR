@@ -22,6 +22,9 @@
             "OFFSET": 0
         },
         "LIDAR_OFFSET_ANGLE": -1.05,
+        "POWER_PIN": 23,
+        "MOTOR_START_COMMAND": "1",
+        "MOTOR_STOP_COMMAND": "0",
         "TARGET_RES": "1/6",
         "TARGET_SPEED": 10,
         "RAW_NAME": "_lidar.pkl",
@@ -80,9 +83,11 @@
         "Y_OFFSET": -37.5,
         "Z_OFFSET": -41.9,
         "NORMAL_RADIUS": 30,
-        "SCALE": 0.001, 
+        "SCALE": 0.001,
         "EXT": "ply",
-        "ASCII": false
+        "ASCII": false,
+        "INTENSITY_SUFFIX": "_intensity",
+        "COLOR_SUFFIX": "_vertex"
     },
 
     "FILTERING": {
