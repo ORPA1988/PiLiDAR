@@ -1,10 +1,10 @@
 import os
 import glob
-import pickle
 import numpy as np
 
 from lib.config import Config
 from lib.pointcloud_numpy import merge_2D_points
+from lib.raw_utils import load_raw_scan
 
 
 def latest_scan_dir(scans_root):
@@ -13,11 +13,6 @@ def latest_scan_dir(scans_root):
         reverse=True,
     )
     return dirs[0] if dirs else None
-
-
-def load_raw_scan(path):
-    with open(path, 'rb') as f:
-        return pickle.load(f)
 
 
 def stats(points_m):

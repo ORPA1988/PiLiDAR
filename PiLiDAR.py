@@ -5,7 +5,7 @@ from lib.lidar_driver import Lidar
 from lib.a4988_driver import A4988
 try:
     from lib.imu_driver import MPU6050Wrapper  # type: ignore
-except Exception:
+except (ImportError, ModuleNotFoundError):
     MPU6050Wrapper = None
 from lib.config import Config, format_value
 from lib.raw_utils import save_raw_scan, get_scan_dict
