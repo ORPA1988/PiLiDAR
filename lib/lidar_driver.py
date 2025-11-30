@@ -15,12 +15,12 @@ import serial
 
 # running from project root
 try:
-    from lib.config import Config, format_value
+    from lib.config import Config
     from lib.raw_utils import save_raw_scan, get_scan_dict
     from lib.platform_utils import init_serial, init_pwm_Pi
     from lib.file_utils import save_data
 except ImportError:
-    from config import Config, format_value
+    from config import Config
     from raw_utils import save_raw_scan, get_scan_dict
     from platform_utils import init_serial, init_pwm_Pi
     from file_utils import save_data
