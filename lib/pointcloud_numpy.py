@@ -188,8 +188,9 @@ def process_raw(config, save=True):
         array_3D = array_3D[::stride]
         print(f"Downsampled to {array_3D.shape[0]} points with stride {stride}.")
 
-    # Z offset and scale on numpy
+    # Z offset, invert Z axis, and scale on numpy
     array_3D[:, 2] += config.get("3D", "Z_OFFSET")
+    array_3D[:, 2] *= -1  # Invert Z axis (points above scanner should be positive)
     scene_scale = config.get("3D", "SCALE")
     if scene_scale != 1:
         array_3D[:, 0:3] *= scene_scale
