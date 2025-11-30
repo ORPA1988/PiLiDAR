@@ -1,5 +1,4 @@
 import os
-import threading
 import pickle
 import numpy as np
 import cv2
