@@ -1,13 +1,10 @@
 '''
-LiDAR driver for LDRobot LD06 and STL27L (Waveshare)
+LiDAR driver for STL27L (Waveshare)
 
-Sample Rates:
-LD06:    4500 samples/s  (375 packages/s x 12 samples/package)
+Sample Rate:
 STL27L: 21600 samples/s (1800 packages/s x 12 samples/package)
 
-Speed Control on Raspberry Pi
-- RPi hardware PWM: https://pypi.org/project/rpi-hardware-pwm
-- curve fitting using scipy.optimize.curve_fit
+The STL27L is controlled via USB and controller board.
 '''
 
 import numpy as np
@@ -17,7 +14,7 @@ import serial
 try:
     from lib.config import Config
     from lib.pointcloud import save_raw_scan, get_scan_dict
-    from lib.platform_utils import init_serial, init_pwm_Pi  # init_serial_MCU, init_pwm_MCU
+    from lib.platform_utils import init_serial
     from lib.file_utils import save_data
     from lib.config import format_value
 
@@ -25,7 +22,7 @@ try:
 except:
     from config import Config
     from pointcloud import save_raw_scan, get_scan_dict
-    from platform_utils import init_serial, init_pwm_Pi  # init_serial_MCU, init_pwm_MCU
+    from platform_utils import init_serial
     from file_utils import save_data
     from config import format_value
 
@@ -48,15 +45,10 @@ class Lidar:
         self.offset             = config.get("LIDAR", config.DEVICE, "OFFSET")
         self.crc_table          = config.crc_table
 
-        # SERIAL
+        # SERIAL - STL27L is controlled via USB and controller board
         # dmesg | grep "tty"
         self.port               = config.PORT
-        
-        # if self.platform in ['Pico', 'Pico W', 'Metro M7']:
-        #     self.serial_connection  = init_serial_MCU(pin=self.port, baudrate=baudrate)
-        # else:  # self.platform in ['Windows', 'Linux', 'RaspberryPi']:
         self.serial_connection  = init_serial(port=self.port, baudrate=config.get("LIDAR", config.DEVICE, "BAUDRATE"))
-        
 
         self.byte_array         = bytearray()
         self.dtype              = np.float32
@@ -75,61 +67,15 @@ class Lidar:
         self.timestamps         = np.empty(self.out_len, dtype=self.dtype)
         self.points_2d          = np.empty((self.out_len * self.dlength, 3), dtype=self.dtype)  # [[x, y, l],[..
 
-        
-        # self.data_dir           = config.lidar_dir  # TODO remove -> npy files replaced by single pkl file
-
         # raw output
         self.z_angles           = []
         self.cartesian_list     = []
 
         # visualization
         self.visualization      = visualization
-        
 
-        if config.get("LIDAR", "GPIO_SERIAL", "ENABLE"):
-            pwm_channel         = config.get("LIDAR", "GPIO_SERIAL", "PWM_CHANNEL")
-            pwm_freq            = config.get("LIDAR", "GPIO_SERIAL", "PWM_FREQ")
-            self.pwm            = init_pwm_Pi(pwm_channel, frequency = pwm_freq)
-            
-            # from speed curve fitting: (slope m, y-intercept b)
-            self.pwm_coeffs = config.get("LIDAR", config.DEVICE, "PWM_COEFFS")
-
-            self.target_speed = config.get("LIDAR", "TARGET_SPEED")
-            self.pwm_dc     = self.update_speed(self.target_speed)
-
-            self.pwm.start(self.pwm_dc * 100)
-
-        # elif self.platform in ['Pico', 'Pico W', 'Metro M7']:
-        #     pwm_pin             = "GP2"
-        #     self.pwm            = init_pwm_MCU(pwm_pin, frequency=pwm_frequency)
-        #     self.pwm.duty_cycle = int(pwm_dc * 65534)
-        else:
-            self.pwm = None
-
-
-    def update_pwm_dc(self, pwm_dc, update=True):
-        self.pwm_dc = pwm_dc
-        self.pwm.change_duty_cycle(self.pwm_dc * 100)
-
-        # update speed if called directly
-        if update:
-            self.target_speed = self.speed_from_pwm(self.pwm_dc)
-
-        return self.pwm_dc
-
-
-    def update_speed(self, target_speed):
-        self.target_speed = target_speed
-        pwm_dc = self.pwm_from_speed(self.target_speed)
-        self.update_pwm_dc(pwm_dc, update=False)
-        return pwm_dc
-    
 
     def close(self):
-        if self.pwm is not None:
-            self.pwm.stop()
-            print("PWM stopped.\n")
-
         if self.visualization is not None:
             self.visualization.close()
             print("Visualization closed.\n")
@@ -246,16 +192,6 @@ class Lidar:
             self.luminance_package[counter] = byte_array[8 + i]
 
 
-    def speed_from_pwm(self, pwm):
-        m, b = self.pwm_coeffs
-        return m * pwm + b
-
-
-    def pwm_from_speed(self, speed):
-        m, b = self.pwm_coeffs
-        self.pwm_coeffs
-        return (speed - b) / m
-
 
     @staticmethod
     def polar2cartesian(angles, distances, offset):
@@ -292,8 +228,8 @@ if __name__ == "__main__":
     
     config = Config()
     
-    # use LD06 or STL27L
-    config.set_device("LD06")
+    # STL27L is the only supported LiDAR sensor
+    config.set_device("STL27L")
     
     config.init(scan_id="_")
     visualize = True

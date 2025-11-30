@@ -120,7 +120,7 @@ class Config:
 
 
     def set_device(self, device: str):
-        '''set sampling rate, baudrate and port for selected device'''
+        '''set sampling rate, baudrate and port for STL27L device via USB'''
         self.DEVICE = device
         self.TARGET_SPEED = self.get("LIDAR", "TARGET_SPEED")
 
@@ -136,10 +136,8 @@ class Config:
 
             self.gpio_setup()  # enable GPIO Ports
 
+            # STL27L is controlled via USB and controller board
             self.PORT = self.get("LIDAR", self.DEVICE , "PORT")
-            if not os.path.exists(self.PORT): 
-                # if USB controller board is not connected, try serial port
-                self.PORT = self.get("LIDAR", "GPIO_SERIAL", "PORT")
             
             # disable filtering on Raspberry Pi as it is computationally too expensive
             if not self.get("FILTERING", "FILTER_ON_PI"):
@@ -147,8 +145,6 @@ class Config:
         
         elif self.platform == 'Windows':
             self.PORT = self.get("LIDAR", self.DEVICE , "PORT_WIN")
-            # disable GPIO-serial settings
-            self.set(False, "LIDAR", "GPIO_SERIAL", "ENABLE")
 
 
     def get(self, *args):
