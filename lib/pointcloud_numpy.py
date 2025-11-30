@@ -1,15 +1,9 @@
 import os
-import threading
-import pickle
 import numpy as np
 import cv2
 from scipy.spatial.transform import Rotation as R
 
-
-def load_raw_scan(path):
-    with open(path, "rb") as f:
-        raw_scan = pickle.load(f)
-    return raw_scan
+from lib.raw_utils import load_raw_scan
 
 
 def remove_NaN(array):
