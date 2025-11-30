@@ -228,13 +228,22 @@ def process_raw(config, save=True):
             print("Warning: Could not load panorama image, falling back to intensity colors.")
     
     if colors_uint8 is None:
-        # Fallback: green-to-red mapping from intensity (0..255)
+        # Fallback color mapping from intensity (0..255).
+        # By default, uses a green-to-red gradient: low intensity = green, high intensity = red.
+        # This can be changed via config["FALLBACK_COLOR_MAP"]: "green-red" (default), "grayscale".
         intensities = np.clip(array_3D[:, 3], 0, 255).astype(np.float32)
         norm = intensities / 255.0
-        reds = (norm * 255).astype(np.uint8)
-        greens = ((1.0 - norm) * 255).astype(np.uint8)
-        blues = np.zeros_like(reds, dtype=np.uint8)
-        colors_uint8 = np.stack([reds, greens, blues], axis=-1)
+        fallback_cmap = config.get("FALLBACK_COLOR_MAP", "green-red").lower()
+        if fallback_cmap == "grayscale":
+            # Map intensity to grayscale (R=G=B)
+            gray = (norm * 255).astype(np.uint8)
+            colors_uint8 = np.stack([gray, gray, gray], axis=-1)
+        else:
+            # Default: green-to-red mapping
+            reds = (norm * 255).astype(np.uint8)
+            greens = ((1.0 - norm) * 255).astype(np.uint8)
+            blues = np.zeros_like(reds, dtype=np.uint8)
+            colors_uint8 = np.stack([reds, greens, blues], axis=-1)
 
     if save:
         print(f"Saving PLY via NumPy backend (ASCII, {array_3D.shape[0]} valid points)...")
