@@ -4,6 +4,10 @@ GEAR_RATIO: 3.7142857 = 1 + 38/14
 STEP_ANGLE: 1.8 = 360° / STEPPER_RES
 TARGET_RES: 1/6 = 0.1666667°
 OFFSET: 90° -> np.pi / 2
+
+Raspberry Pi 5 Compatibility:
+Uses gpiozero library which works on both Pi 4 and Pi 5.
+gpiozero uses lgpio as backend on Pi 5 for proper GPIO access.
 '''
 
 import json
@@ -22,8 +26,7 @@ except:
 
 platform = get_platform()
 if platform == 'RaspberryPi':
-    # os.environ['LG_WD'] = '/tmp'  # set LGPIO tmp directory
-    import RPi.GPIO as GPIO  # type: ignore
+    from gpiozero import OutputDevice  # type: ignore
 
 
 class Config:
@@ -177,12 +180,9 @@ class Config:
         return eval(formula)
 
     def gpio_setup(self, debug=False):
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setwarnings(debug)
-        
-        # power relay
+        # Initialize power relay using gpiozero (compatible with Pi 4 and Pi 5)
         relay_pin = self.get("STEPPER", "RELAY_PIN")
-        GPIO.setup(relay_pin, GPIO.OUT)
+        self.relay_device = OutputDevice(relay_pin)
 
 
 def format_value(value, digits):

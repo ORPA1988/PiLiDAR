@@ -4,9 +4,13 @@ http://www.allegromicro.com/~/media/Files/Datasheets/A4988-Datasheet.ashx
 
 microstepping:
 https://i.stack.imgur.com/vN7JL.png
+
+Raspberry Pi 5 Compatibility:
+Uses gpiozero library which works on both Pi 4 and Pi 5.
+gpiozero uses lgpio as backend on Pi 5 for proper GPIO access.
 '''
 
-import RPi.GPIO as GPIO     # type: ignore
+from gpiozero import OutputDevice  # type: ignore
 from time import sleep
 
 class A4988:
@@ -14,20 +18,17 @@ class A4988:
                  delay=0.001, step_angle=1.8, microsteps=16, 
                  gear_ratio=1.0, verbose=False):
         
-        # Disable warnings
-        GPIO.setwarnings(verbose) 
-
-        GPIO.setmode(GPIO.BCM)
-
+        # Initialize GPIO pins using gpiozero (compatible with Pi 4 and Pi 5)
+        self.dir_device = OutputDevice(dir_pin)
+        self.step_device = OutputDevice(step_pin)
+        
+        # Store pin numbers for reference
         self.dir_pin = dir_pin
-        GPIO.setup(self.dir_pin, GPIO.OUT)
-
         self.step_pin = step_pin
-        GPIO.setup(self.step_pin, GPIO.OUT)
-
         self.ms_pins = ms_pins
-        for pin in self.ms_pins:
-            GPIO.setup(pin, GPIO.OUT)
+        
+        # Initialize microstepping pins
+        self.ms_devices = [OutputDevice(pin) for pin in ms_pins]
         
         self.current_steps = 0  # internal absolute angle
 
@@ -43,11 +44,17 @@ class A4988:
                            16:[True, True, True]}
 
         if self.microsteps in self.step_modes:
-            for pin, state in zip(self.ms_pins, self.step_modes[self.microsteps]):
-                GPIO.output(pin, state)
+            for device, state in zip(self.ms_devices, self.step_modes[self.microsteps]):
+                if state:
+                    device.on()
+                else:
+                    device.off()
 
     def set_direction(self, direction):
-        GPIO.output(self.dir_pin, direction)
+        if direction:
+            self.dir_device.on()
+        else:
+            self.dir_device.off()
 
     def get_steps_for_angle(self, angle):
         return int((angle / self.step_angle) * self.microsteps * self.gear_ratio)
@@ -56,9 +63,9 @@ class A4988:
         return (steps / (self.microsteps * self.gear_ratio)) * self.step_angle
 
     def step(self):
-        GPIO.output(self.step_pin, True)
+        self.step_device.on()
         sleep(0.0001)
-        GPIO.output(self.step_pin, False)
+        self.step_device.off()
         sleep(self.delay)
 
     def move_steps(self, steps):
@@ -102,10 +109,11 @@ class A4988:
         return current_angle
     
     def close(self):
-        #GPIO.setmode(GPIO.BCM)
-        GPIO.cleanup(self.ms_pins)
-        GPIO.cleanup(self.dir_pin)
-        GPIO.cleanup(self.step_pin)
+        # Close all gpiozero devices
+        for device in self.ms_devices:
+            device.close()
+        self.dir_device.close()
+        self.step_device.close()
 
 
 if __name__ == "__main__":
