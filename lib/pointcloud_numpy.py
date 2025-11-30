@@ -92,11 +92,11 @@ def angular_lookup(angular_points, pano, scale=1, degrees=False, z_rotate=0):
     return colors
 
 
-def save_pointcloud_numpy(filepath, points, colors=None, intensities=None, ascii=True):
-    """Save point cloud to PLY file.
+def save_pointcloud_numpy(filepath, points, colors=None, intensities=None):
+    """Save point cloud to PLY file in ASCII format.
     
-    Note: Binary format is not fully implemented due to strict dtype packing requirements.
-    Always uses ASCII format for maximum compatibility (e.g., CloudCompare).
+    Note: Only ASCII format is supported for maximum compatibility (e.g., CloudCompare).
+    Binary format requires strict dtype packing per property and is not implemented.
     """
     directory, filename = os.path.split(filepath)
     os.makedirs(directory, exist_ok=True)
@@ -134,9 +134,9 @@ def save_pointcloud_numpy(filepath, points, colors=None, intensities=None, ascii
             np.savetxt(f, points.astype(np.float32), fmt="%f %f %f")
 
 
-def save_pointcloud_threaded(points, output_path, colors=None, intensities=None, ascii=True):
+def save_pointcloud_threaded(points, output_path, colors=None, intensities=None):
     # Avoid threading to mitigate OpenBLAS munmap warnings on Pi
-    save_pointcloud_numpy(output_path, points, colors, intensities, ascii)
+    save_pointcloud_numpy(output_path, points, colors, intensities)
 
 
 def process_raw(config, save=True):
@@ -227,7 +227,6 @@ def process_raw(config, save=True):
             points=array_3D[:, 0:3],
             colors=colors_uint8,
             intensities=None,
-            ascii=True,
         )
 
     print("\nprocessing 3D (NumPy) completed.")
