@@ -88,10 +88,9 @@ def init_pwm_Pi(pwm_channel=0, frequency=30000):
     if is_raspberry_pi_5():
         # Map old channel numbers to Pi 5 channel numbers for GPIO18/19
         pi5_channel_map = {0: 2, 1: 3}  # GPIO18 -> ch2, GPIO19 -> ch3
-        adjusted_channel = pi5_channel_map.get(pwm_channel, pwm_channel)
-        return HardwarePWM(pwm_channel=adjusted_channel, hz=frequency, chip=0)
-    else:
-        return HardwarePWM(pwm_channel=pwm_channel, hz=frequency, chip=0)
+        pwm_channel = pi5_channel_map.get(pwm_channel, pwm_channel)
+    
+    return HardwarePWM(pwm_channel=pwm_channel, hz=frequency, chip=0)
 
 def init_pwm_MCU(pin="GP2", frequency=30000):
     from pwmio import PWMOut        # type: ignore

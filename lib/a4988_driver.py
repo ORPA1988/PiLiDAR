@@ -45,16 +45,10 @@ class A4988:
 
         if self.microsteps in self.step_modes:
             for device, state in zip(self.ms_devices, self.step_modes[self.microsteps]):
-                if state:
-                    device.on()
-                else:
-                    device.off()
+                device.value = state
 
     def set_direction(self, direction):
-        if direction:
-            self.dir_device.on()
-        else:
-            self.dir_device.off()
+        self.dir_device.value = direction
 
     def get_steps_for_angle(self, angle):
         return int((angle / self.step_angle) * self.microsteps * self.gear_ratio)
