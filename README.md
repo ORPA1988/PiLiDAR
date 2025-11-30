@@ -84,6 +84,110 @@ Scan duration:
 37s stitching, cleanup
 
 
+## Sensor Position Configuration
+
+To generate correct 3D point cloud output, the physical positions of the LiDAR and camera must be defined in `config.json`. The coordinate system uses a Z-up convention where:
+- **X-axis**: points forward (LiDAR scanning direction)
+- **Y-axis**: points to the left
+- **Z-axis**: points up (rotation axis of the stepper motor)
+
+![Coordinate System](images/CAD_v2.jpg)
+*CAD model showing sensor arrangement*
+
+### Required Parameters in config.json
+
+#### 1. LiDAR Y-Offset (`3D.Y_OFFSET`)
+The horizontal distance from the rotation axis (stepper motor shaft) to the LiDAR sensor in millimeters.
+- **Positive values**: LiDAR is positioned towards the left of the rotation axis
+- **Negative values**: LiDAR is positioned towards the right of the rotation axis
+
+```json
+"3D": {
+    "Y_OFFSET": -37.5,
+    ...
+}
+```
+*Example: The LiDAR is mounted 37.5mm to the right of the rotation axis*
+
+#### 2. LiDAR Z-Offset (`3D.Z_OFFSET`)
+The vertical distance from the panorama camera optical center to the LiDAR sensor in millimeters.
+- **Positive values**: LiDAR is positioned above the camera
+- **Negative values**: LiDAR is positioned below the camera
+
+```json
+"3D": {
+    ...
+    "Z_OFFSET": -41.9,
+    ...
+}
+```
+*Example: The LiDAR is mounted 41.9mm below the camera optical center*
+
+#### 3. LiDAR Angular Offset (`LIDAR.LIDAR_OFFSET_ANGLE`)
+A small rotational correction for the LiDAR axis in degrees. This compensates for mechanical assembly imperfections.
+- Adjust this value if the 3D scan appears slightly rotated relative to the expected orientation
+
+```json
+"LIDAR": {
+    ...
+    "LIDAR_OFFSET_ANGLE": -1.05,
+    ...
+}
+```
+*Example: A -1.05° correction is applied to compensate for mounting angle deviation*
+
+#### 4. Vertex Color Rotation (`VERTEXCOLOUR.Z_ROTATE`)
+A rotational offset in degrees to align the panorama image with the 3D point cloud when sampling vertex colors.
+- Adjust this value if the colors from the panorama don't align correctly with the 3D geometry
+
+```json
+"VERTEXCOLOUR": {
+    "SCALE": 0.5,
+    "Z_ROTATE": 0.0
+}
+```
+*Example: No additional rotation is needed (0.0°)*
+
+### How to Measure Sensor Positions
+
+1. **Measure Y_OFFSET**: 
+   - Measure the horizontal distance from the center of the stepper motor shaft to the center of the LiDAR sensor
+   - Use a negative value if the LiDAR is on the right side of the rotation axis
+
+2. **Measure Z_OFFSET**:
+   - Measure the vertical distance from the camera lens optical center to the LiDAR sensor plane
+   - Use a negative value if the LiDAR is below the camera
+
+3. **Calibrate LIDAR_OFFSET_ANGLE**:
+   - Take a test scan of a scene with clear vertical lines (e.g., door frames, corners)
+   - If vertical features appear tilted, adjust this value until they are straight
+
+4. **Calibrate Z_ROTATE**:
+   - Take a test scan with both LiDAR and camera enabled
+   - If the vertex colors are misaligned (shifted horizontally), adjust this value
+   - Each degree of rotation corresponds to approximately 10 pixels at 3600px panorama width
+
+### Example Configuration
+
+```json
+{
+    "LIDAR": {
+        "LIDAR_OFFSET_ANGLE": -1.05,
+        ...
+    },
+    "3D": {
+        "Y_OFFSET": -37.5,
+        "Z_OFFSET": -41.9,
+        ...
+    },
+    "VERTEXCOLOUR": {
+        "SCALE": 0.5,
+        "Z_ROTATE": 0.0
+    }
+}
+```
+
+
 ## wiring
 
 ![breadboard version 2](images/pilidar_breadboard.jpg)
