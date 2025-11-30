@@ -31,6 +31,19 @@ def get_platform():
     return platform
 
 
+def is_raspberry_pi_5():
+    """
+    Detect if running on Raspberry Pi 5.
+    Returns True if Pi 5, False otherwise.
+    """
+    try:
+        with open('/proc/device-tree/model', 'r', encoding='utf-8') as f:
+            model = f.read()
+            return 'Raspberry Pi 5' in model
+    except (FileNotFoundError, IOError):
+        return False
+
+
 platform = get_platform()
 
 if platform in ['Windows', 'Mac', 'Linux', 'RaspberryPi']:
@@ -56,8 +69,27 @@ def init_serial_MCU(pin='GP1', baudrate=230400):
     
 
 def init_pwm_Pi(pwm_channel=0, frequency=30000):
-    '''pwm_channel 0: GP18, pwm_channel 1: GP19'''
+    """
+    Initialize hardware PWM on Raspberry Pi.
+    
+    PWM channel mapping differs between Pi 4 and Pi 5:
+    - Pi 4 and earlier: channel 0 -> GPIO18, channel 1 -> GPIO19
+    - Pi 5: channel 0 -> GPIO12, channel 1 -> GPIO13, 
+            channel 2 -> GPIO18, channel 3 -> GPIO19
+    
+    For GPIO18 (commonly used for LiDAR PWM):
+    - Pi 4: use pwm_channel=0
+    - Pi 5: use pwm_channel=2
+    """
     from rpi_hardware_pwm import HardwarePWM   # type: ignore
+    
+    # Adjust PWM channel for Raspberry Pi 5
+    # On Pi 5, GPIO18 is on channel 2 (not channel 0 like on Pi 4)
+    if is_raspberry_pi_5():
+        # Map old channel numbers to Pi 5 channel numbers for GPIO18/19
+        pi5_channel_map = {0: 2, 1: 3}  # GPIO18 -> ch2, GPIO19 -> ch3
+        pwm_channel = pi5_channel_map.get(pwm_channel, pwm_channel)
+    
     return HardwarePWM(pwm_channel=pwm_channel, hz=frequency, chip=0)
 
 def init_pwm_MCU(pin="GP2", frequency=30000):

@@ -1,14 +1,20 @@
+"""
+GPIO interrupt handler for PiLiDAR button.
+
+Raspberry Pi 5 Compatibility:
+Uses gpiozero library which works on both Pi 4 and Pi 5.
+gpiozero uses lgpio as backend on Pi 5 for proper GPIO access.
+"""
 import subprocess
 import time
+import signal
+import sys
 
-# import os
-# os.environ['LG_WD'] = '/tmp'  # export LG_WD=/tmp  # set LGPIO tmp directory
-
-import RPi.GPIO as GPIO  # type: ignore
+from gpiozero import Button  # type: ignore
 
 
 # Define the callback function that runs when the button is pressed
-def start_callback(channel):
+def start_callback():
     
     # # ENABLE USB POWER
     # subprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "on"])
@@ -42,20 +48,27 @@ MAIN_SCRIPT = "/home/pi/PiLiDAR/PiLiDAR.py"
 # subprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "off"])
 
 
-# Set up the GPIO mode, pin direction and event detection
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(START_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-GPIO.add_event_detect(START_PIN, GPIO.FALLING, callback=start_callback, bouncetime=200)
+# Set up the button with gpiozero (compatible with Pi 4 and Pi 5)
+# pull_up=True enables internal pull-up resistor, bounce_time handles debouncing
+button = Button(START_PIN, pull_up=True, bounce_time=0.2)
+button.when_pressed = start_callback
 
 
 # Initialize the process variable
 process = None
 
+
+def signal_handler(sig, frame):
+    """Handle cleanup on exit"""
+    print("\nCleaning up...")
+    button.close()
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+
+
 # Keep the main thread running
-try:
-    print("Waiting for button press...")
-    while True:
-        time.sleep(0.2)
-        
-except KeyboardInterrupt:
-    GPIO.cleanup()
+print("Waiting for button press...")
+signal.pause()

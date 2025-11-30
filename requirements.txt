@@ -12,5 +12,7 @@ jupyter
 quat>=1.0.0
 mpu6050>=0.0.3
 
-rpi-lgpio>=0.6
-#rpi-hardware-pwm>=0.2.2
+# Raspberry Pi GPIO libraries (compatible with Pi 4 and Pi 5)
+gpiozero>=2.0  # Works on both Pi 4 and Pi 5, uses lgpio as backend
+rpi-lgpio>=0.6  # lgpio backend for gpiozero on Pi 5
+rpi-hardware-pwm>=0.2.2  # Hardware PWM control (updated for Pi 5 support)

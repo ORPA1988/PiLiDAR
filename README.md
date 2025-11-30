@@ -35,7 +35,7 @@ klick the images to open the pointclouds in Sketchfab.
 
 - LDRobot LD06, LD19 or STL27L LiDAR
 - Raspberry Pi HQ Camera with ArduCam M12 Lens [(M25156H18, p.7)](https://www.arducam.com/doc/Arducam_M12_Lens_Kit_for_Pi_HQ_Camera.pdf)
-- Raspberry Pi 4
+- Raspberry Pi 4 or **Raspberry Pi 5** (fully compatible)
 - NEMA17 42-23 stepper with A4988 driver
 
 - Power Supply: 
@@ -213,17 +213,48 @@ then execute the _temporary_ solution from python:
 - Unplug and replug the serial device, or reboot the system, to apply the changes.
 
 ### Hardware PWM on Raspberry Pi
-enable GPIO_18 (PWM0) and GPIO_19 (PWM1)
+
+**Important:** PWM channel mapping differs between Pi 4 and Pi 5!
+
+#### Raspberry Pi 4 and earlier
+enable GPIO_18 (PWM0) and GPIO_19 (PWM1):
     
     echo "dtoverlay=pwm-2chan" >> /boot/firmware/config.txt 
 
-check if "pwm_bcm2835" now exists:
+#### Raspberry Pi 5
+On Pi 5, GPIO18/19 are on channels 2/3 (not 0/1):
+- GPIO12 → channel 0
+- GPIO13 → channel 1  
+- GPIO18 → channel 2
+- GPIO19 → channel 3
+
+Enable PWM for GPIO18/19:
+
+    echo "dtoverlay=pwm-2chan" >> /boot/firmware/config.txt 
+
+The PiLiDAR software automatically detects Pi 5 and uses the correct channel mapping.
+
+#### Verify PWM is enabled
+check if PWM kernel module is loaded:
 
     lsmod | grep pwm
 
 Install [RPi Hardware PWM library](https://github.com/Pioreactor/rpi_hardware_pwm):
 
     pip install rpi-hardware-pwm
+
+
+### Raspberry Pi 5 Specific Notes
+
+The project is fully compatible with Raspberry Pi 5. Key differences handled automatically:
+
+1. **GPIO Library**: Uses `gpiozero` which works on both Pi 4 and Pi 5 (uses `lgpio` backend on Pi 5)
+2. **PWM Channels**: Automatic channel mapping adjustment for Pi 5
+3. **GPIO Chip**: Pi 5 uses a different GPIO chip (RP1), handled transparently by gpiozero
+
+Install required packages on Pi 5:
+
+    pip install gpiozero rpi-lgpio rpi-hardware-pwm
 
 
 ### Panorama Stitching
@@ -342,9 +373,19 @@ Plotly seems to render client-sided, unlike Open3D Web Visualizer which renders 
 get [CP210x_Universal_Windows_Driver.zip](https://files.waveshare.com/upload/6/63/CP210x_Universal_Windows_Driver.zip) here:  
 https://www.waveshare.com/wiki/DTOF_LIDAR_STL27L#Software_Download
 
-### RPi.GPIO RuntimeError: Failed to add edge detection
-current bookworm version has deprecated sysfs GPIO interface removed.  
-use [LGPIO](https://pypi.org/project/rpi-lgpio/) as described [here](https://raspberrypi.stackexchange.com/questions/147332/rpi-gpio-runtimeerror-failed-to-add-edge-detection):
+### GPIO on Raspberry Pi 5
+PiLiDAR now uses `gpiozero` library which is compatible with both Raspberry Pi 4 and 5.
+The `gpiozero` library automatically uses the correct backend:
+- **Pi 4**: Uses RPi.GPIO or pigpio backend
+- **Pi 5**: Uses lgpio backend (required due to new RP1 GPIO chip)
+
+If you encounter GPIO issues on Pi 5, ensure you have the correct packages:
+
+    pip install gpiozero rpi-lgpio
+
+### Legacy RPi.GPIO RuntimeError (Pi 4 with Bookworm)
+If using older code with RPi.GPIO on Bookworm, the deprecated sysfs GPIO interface was removed.  
+Use [LGPIO](https://pypi.org/project/rpi-lgpio/) as described [here](https://raspberrypi.stackexchange.com/questions/147332/rpi-gpio-runtimeerror-failed-to-add-edge-detection):
 
     sudo apt remove python3-rpi.gpio
     sudo apt update
@@ -354,7 +395,7 @@ use [LGPIO](https://pypi.org/project/rpi-lgpio/) as described [here](https://ras
     # or in an env without system packages:
     pip3 install rpi-lgpio
 
-LGPIO creates temp-files ([issue](https://github.com/joan2937/lg/issues/12)) like ".lgd-nfy0". gpio-interrupt.py executes 'export LG_WD=/tmp' to set it's CWD.
+LGPIO creates temp-files ([issue](https://github.com/joan2937/lg/issues/12)) like ".lgd-nfy0". The pilidar.service sets LG_WD=/tmp to handle this.
 
 
 ### poor performance of VS Code on Raspberry Pi
