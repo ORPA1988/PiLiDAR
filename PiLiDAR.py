@@ -10,7 +10,7 @@ from lib.rpicam_utils import take_HDR_photo, estimate_camera_parameters  #, take
 from lib.pano_utils import hugin_stitch
 
 
-print('''
+print(r'''
  ____  _ _     _ ____    _    ____ 
 |  _ \(_) |   (_)  _ \  / \  |  _ \ 
 | |_) | | |   | | | | |/ _ \ | |_) | 
