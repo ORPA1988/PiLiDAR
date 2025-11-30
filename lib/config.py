@@ -14,7 +14,6 @@ import json
 import os
 import datetime
 from typing import Optional
-# import subprocess
 
 try:
     from lib.file_utils import make_dir
@@ -89,16 +88,7 @@ class Config:
 
 
     def init(self, scan_id=None):
-        ## TODO: fix power control issues
-        ## RELAY
-        # GPIO.output(relay_pin, 1)  # enable Power relay 
-        ## USB HUB
-        #bsubprocess.run(["sudo", "uhubctl", "-l", "1-1", "-a", "on"])  # enable USB Hub Power
-        ## LIDAR
-        # self.serial_connection.write(b'1')  # start STL27L motor
-        # self.serial_connection.write(b'0')  # stop STL27L motor
-        
-        
+        """Initialize scan directory and file paths."""
         if scan_id is not None:
             self.scan_id = scan_id
         else:
@@ -108,12 +98,10 @@ class Config:
         self.pto_path           = os.path.join(self.scan_dir, f'{self.scan_id}.pto')
         self.pano_path          = os.path.join(self.scan_dir, f'{self.scan_id}{self.get("PANO", "OUTPUT_NAME")}')
         self.raw_path           = os.path.join(self.scan_dir, f"{self.scan_id}{self.get('LIDAR', 'RAW_NAME')}")
-        self.pcd_path           = os.path.join(self.scan_dir, f'{self.scan_id}.{self.get("3D", "EXT")}')            # .pcd, .ply, .xyz, .xyzrgb
-        self.filtered_pcd_path  = os.path.join(self.scan_dir, f'{self.scan_id}_filtered.{self.get("3D", "EXT")}')
-
-        self.lidar_dir = os.path.join(self.scan_dir, "lidar")         # TODO remove -> npy files replaced by single pkl file
+        self.pcd_path = os.path.join(self.scan_dir, f'{self.scan_id}.{self.get("3D", "EXT")}')
+        self.filtered_pcd_path = os.path.join(self.scan_dir, f'{self.scan_id}_filtered.{self.get("3D", "EXT")}')
         
-        self.img_dir   = make_dir(os.path.join(self.scan_dir, "img"))
+        self.img_dir = make_dir(os.path.join(self.scan_dir, "img"))
         self.tmp_dir   = make_dir(os.path.join(self.scan_dir, "tmp"))
         
         self.imglist = []
@@ -130,8 +118,8 @@ class Config:
 
         if self.platform == 'RaspberryPi':
             print("Platform: Raspberry Pi")
-
-            # BUG legacy: allow access to serial port on Raspberry Pi
+            
+            # Ensure access to serial port on Raspberry Pi
             allow_serial()
 
             self.gpio_setup()  # enable GPIO Ports
@@ -177,7 +165,16 @@ class Config:
 
 
     def evaluate_formula(self, formula: str):
-        return eval(formula)
+        """Safely evaluate simple mathematical formulas."""
+        # Only allow basic arithmetic operations
+        allowed_chars = set('0123456789+-*/(). ')
+        if not all(c in allowed_chars for c in formula):
+            raise ValueError(f"Invalid characters in formula: {formula}")
+        try:
+            # Use eval with restricted namespace for safety
+            return eval(formula, {"__builtins__": {}}, {})
+        except Exception as e:
+            raise ValueError(f"Failed to evaluate formula '{formula}': {e}")
 
     def gpio_setup(self, debug=False):
         # Initialize power relay using gpiozero (compatible with Pi 4 and Pi 5)

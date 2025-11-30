@@ -15,19 +15,15 @@ import serial
 
 # running from project root
 try:
-    from lib.config import Config
-    from lib.pointcloud import save_raw_scan, get_scan_dict
-    from lib.platform_utils import init_serial, init_pwm_Pi  # init_serial_MCU, init_pwm_MCU
+    from lib.config import Config, format_value
+    from lib.raw_utils import save_raw_scan, get_scan_dict
+    from lib.platform_utils import init_serial, init_pwm_Pi
     from lib.file_utils import save_data
-    from lib.config import format_value
-
-# testing from this file
-except:
-    from config import Config
-    from pointcloud import save_raw_scan, get_scan_dict
-    from platform_utils import init_serial, init_pwm_Pi  # init_serial_MCU, init_pwm_MCU
+except ImportError:
+    from config import Config, format_value
+    from raw_utils import save_raw_scan, get_scan_dict
+    from platform_utils import init_serial, init_pwm_Pi
     from file_utils import save_data
-    from config import format_value
 
 
 class Lidar:
@@ -37,7 +33,7 @@ class Lidar:
         self.sampling_rate      = config.get("LIDAR", config.DEVICE, "SAMPLING_RATE")
         self.raw_path           = config.raw_path
 
-        self.z_angle            = None  # gets updated externally by A4988 driver
+        self.z_angle: float | None = None  # gets updated externally by A4988 driver
 
         # constants
         self.start_byte         = bytes([0x54])
@@ -48,14 +44,9 @@ class Lidar:
         self.offset             = config.get("LIDAR", config.DEVICE, "OFFSET")
         self.crc_table          = config.crc_table
 
-        # SERIAL
-        # dmesg | grep "tty"
-        self.port               = config.PORT
-        
-        # if self.platform in ['Pico', 'Pico W', 'Metro M7']:
-        #     self.serial_connection  = init_serial_MCU(pin=self.port, baudrate=baudrate)
-        # else:  # self.platform in ['Windows', 'Linux', 'RaspberryPi']:
-        self.serial_connection  = init_serial(port=self.port, baudrate=config.get("LIDAR", config.DEVICE, "BAUDRATE"))
+        # SERIAL connection
+        self.port = config.PORT
+        self.serial_connection = init_serial(port=self.port, baudrate=config.get("LIDAR", config.DEVICE, "BAUDRATE"))
         
 
         self.byte_array         = bytearray()
@@ -75,9 +66,6 @@ class Lidar:
         self.timestamps         = np.empty(self.out_len, dtype=self.dtype)
         self.points_2d          = np.empty((self.out_len * self.dlength, 3), dtype=self.dtype)  # [[x, y, l],[..
 
-        
-        # self.data_dir           = config.lidar_dir  # TODO remove -> npy files replaced by single pkl file
-
         # raw output
         self.z_angles           = []
         self.cartesian_list     = []
@@ -87,22 +75,15 @@ class Lidar:
         
 
         if config.get("LIDAR", "GPIO_SERIAL", "ENABLE"):
-            pwm_channel         = config.get("LIDAR", "GPIO_SERIAL", "PWM_CHANNEL")
-            pwm_freq            = config.get("LIDAR", "GPIO_SERIAL", "PWM_FREQ")
-            self.pwm            = init_pwm_Pi(pwm_channel, frequency = pwm_freq)
+            pwm_channel = config.get("LIDAR", "GPIO_SERIAL", "PWM_CHANNEL")
+            pwm_freq = config.get("LIDAR", "GPIO_SERIAL", "PWM_FREQ")
+            self.pwm = init_pwm_Pi(pwm_channel, frequency=pwm_freq)
             
-            # from speed curve fitting: (slope m, y-intercept b)
+            # Speed curve fitting coefficients (slope m, y-intercept b)
             self.pwm_coeffs = config.get("LIDAR", config.DEVICE, "PWM_COEFFS")
-
             self.target_speed = config.get("LIDAR", "TARGET_SPEED")
-            self.pwm_dc     = self.update_speed(self.target_speed)
-
+            self.pwm_dc = self.update_speed(self.target_speed)
             self.pwm.start(self.pwm_dc * 100)
-
-        # elif self.platform in ['Pico', 'Pico W', 'Metro M7']:
-        #     pwm_pin             = "GP2"
-        #     self.pwm            = init_pwm_MCU(pwm_pin, frequency=pwm_frequency)
-        #     self.pwm.duty_cycle = int(pwm_dc * 65534)
         else:
             self.pwm = None
 
