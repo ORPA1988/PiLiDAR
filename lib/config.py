@@ -165,15 +165,43 @@ class Config:
 
 
     def evaluate_formula(self, formula: str):
-        """Safely evaluate simple mathematical formulas."""
-        # Only allow basic arithmetic operations
-        allowed_chars = set('0123456789+-*/(). ')
-        if not all(c in allowed_chars for c in formula):
-            raise ValueError(f"Invalid characters in formula: {formula}")
+        """Safely evaluate simple mathematical formulas using AST parsing."""
+        import ast
+        import operator
+        
+        # Define allowed binary operators
+        operators = {
+            ast.Add: operator.add,
+            ast.Sub: operator.sub,
+            ast.Mult: operator.mul,
+            ast.Div: operator.truediv,
+        }
+        
+        def _eval(node):
+            if isinstance(node, ast.Expression):
+                return _eval(node.body)
+            elif isinstance(node, ast.Constant):
+                if isinstance(node.value, (int, float)):
+                    return node.value
+                raise ValueError(f"Unsupported constant type: {type(node.value)}")
+            elif isinstance(node, ast.BinOp):
+                left = _eval(node.left)
+                right = _eval(node.right)
+                op_type = type(node.op)
+                if op_type not in operators:
+                    raise ValueError(f"Unsupported operator: {op_type.__name__}")
+                return operators[op_type](left, right)
+            elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+                return -_eval(node.operand)
+            elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.UAdd):
+                return +_eval(node.operand)
+            else:
+                raise ValueError(f"Unsupported expression type: {type(node).__name__}")
+        
         try:
-            # Use eval with restricted namespace for safety
-            return eval(formula, {"__builtins__": {}}, {})
-        except Exception as e:
+            tree = ast.parse(formula, mode='eval')
+            return _eval(tree)
+        except (SyntaxError, ValueError) as e:
             raise ValueError(f"Failed to evaluate formula '{formula}': {e}")
 
     def gpio_setup(self, debug=False):

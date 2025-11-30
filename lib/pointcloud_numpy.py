@@ -1,15 +1,9 @@
 import os
-import threading
-import pickle
 import numpy as np
 import cv2
 from scipy.spatial.transform import Rotation as R
 
-
-def load_raw_scan(path):
-    with open(path, "rb") as f:
-        raw_scan = pickle.load(f)
-    return raw_scan
+from lib.raw_utils import load_raw_scan
 
 
 def remove_NaN(array):
@@ -99,6 +93,11 @@ def angular_lookup(angular_points, pano, scale=1, degrees=False, z_rotate=0):
 
 
 def save_pointcloud_numpy(filepath, points, colors=None, intensities=None, ascii=True):
+    """Save point cloud to PLY file.
+    
+    Note: Binary format is not fully implemented due to strict dtype packing requirements.
+    Always uses ASCII format for maximum compatibility (e.g., CloudCompare).
+    """
     directory, filename = os.path.split(filepath)
     os.makedirs(directory, exist_ok=True)
 
@@ -108,7 +107,7 @@ def save_pointcloud_numpy(filepath, points, colors=None, intensities=None, ascii
 
     header = [
         "ply",
-        "format ascii 1.0" if ascii else "format binary_little_endian 1.0",
+        "format ascii 1.0",
         f"element vertex {n}",
         "property float x",
         "property float y",
@@ -122,32 +121,17 @@ def save_pointcloud_numpy(filepath, points, colors=None, intensities=None, ascii
 
     with open(filepath, "wb") as f:
         f.write(("\n".join(header) + "\n").encode("ascii"))
-        if ascii:
-            if has_intensities and has_colors:
-                data = np.column_stack([points.astype(np.float32), intensities.astype(np.float32).reshape(-1), colors.astype(np.uint8)])
-                np.savetxt(f, data, fmt="%f %f %f %f %d %d %d")
-            elif has_colors:
-                data = np.column_stack([points.astype(np.float32), colors.astype(np.uint8)])
-                np.savetxt(f, data, fmt="%f %f %f %d %d %d")
-            elif has_intensities:
-                data = np.column_stack([points.astype(np.float32), intensities.astype(np.float32).reshape(-1)])
-                np.savetxt(f, data, fmt="%f %f %f %f")
-            else:
-                np.savetxt(f, points.astype(np.float32), fmt="%f %f %f")
+        if has_intensities and has_colors:
+            data = np.column_stack([points.astype(np.float32), intensities.astype(np.float32).reshape(-1), colors.astype(np.uint8)])
+            np.savetxt(f, data, fmt="%f %f %f %f %d %d %d")
+        elif has_colors:
+            data = np.column_stack([points.astype(np.float32), colors.astype(np.uint8)])
+            np.savetxt(f, data, fmt="%f %f %f %d %d %d")
+        elif has_intensities:
+            data = np.column_stack([points.astype(np.float32), intensities.astype(np.float32).reshape(-1)])
+            np.savetxt(f, data, fmt="%f %f %f %f")
         else:
-            # Force ASCII to ensure maximal compatibility (CloudCompare)
-            # Binary requires strict dtype packing per property; skipping for now.
-            if has_intensities and has_colors:
-                data = np.column_stack([points.astype(np.float32), intensities.astype(np.float32).reshape(-1), colors.astype(np.uint8)])
-                np.savetxt(f, data, fmt="%f %f %f %f %d %d %d")
-            elif has_colors:
-                data = np.column_stack([points.astype(np.float32), colors.astype(np.uint8)])
-                np.savetxt(f, data, fmt="%f %f %f %d %d %d")
-            elif has_intensities:
-                data = np.column_stack([points.astype(np.float32), intensities.astype(np.float32).reshape(-1)])
-                np.savetxt(f, data, fmt="%f %f %f %f")
-            else:
-                np.savetxt(f, points.astype(np.float32), fmt="%f %f %f")
+            np.savetxt(f, points.astype(np.float32), fmt="%f %f %f")
 
 
 def save_pointcloud_threaded(points, output_path, colors=None, intensities=None, ascii=True):

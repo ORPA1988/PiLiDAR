@@ -12,15 +12,16 @@ Speed Control on Raspberry Pi
 
 import numpy as np
 import serial
+from typing import Optional
 
 # running from project root
 try:
-    from lib.config import Config, format_value
+    from lib.config import Config
     from lib.raw_utils import save_raw_scan, get_scan_dict
     from lib.platform_utils import init_serial, init_pwm_Pi
     from lib.file_utils import save_data
 except ImportError:
-    from config import Config, format_value
+    from config import Config
     from raw_utils import save_raw_scan, get_scan_dict
     from platform_utils import init_serial, init_pwm_Pi
     from file_utils import save_data
@@ -33,7 +34,7 @@ class Lidar:
         self.sampling_rate      = config.get("LIDAR", config.DEVICE, "SAMPLING_RATE")
         self.raw_path           = config.raw_path
 
-        self.z_angle: float | None = None  # gets updated externally by A4988 driver
+        self.z_angle: Optional[float] = None  # gets updated externally by A4988 driver
 
         # constants
         self.start_byte         = bytes([0x54])
