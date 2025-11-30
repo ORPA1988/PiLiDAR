@@ -7,3 +7,4 @@ matplotlib>=3.7
 gpiozero>=2.0
 rpi-lgpio>=0.6
 rpi-hardware-pwm>=0.2.2
+Flask>=3.0.0

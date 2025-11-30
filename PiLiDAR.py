@@ -127,6 +127,11 @@ try:
         
         stepper.move_to_angle(0)   # return to 0°
 
+        # Power off stepper motor to prevent overheating
+        if hasattr(config, 'relay_device') and config.relay_device is not None:
+            config.relay_device.off()
+            print("Stepper motor powered off.")
+
         # Save raw_scan to pickle file
         raw_scan = get_scan_dict(lidar.z_angles, cartesian_list=lidar.cartesian_list)
 
@@ -139,6 +144,11 @@ try:
 
 finally:
     print("\nPiLiDAR STOPPED\n")
+    
+    # Power off stepper motor before closing
+    if hasattr(config, 'relay_device') and config.relay_device is not None:
+        config.relay_device.off()
+    
     if enable_lidar and lidar is not None:
         lidar.close()
 

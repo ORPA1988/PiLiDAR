@@ -1,12 +1,12 @@
 {
     "ENABLE_LIDAR": true,
-    "ENABLE_CAM": true,
+    "ENABLE_CAM": false,
     "ENABLE_IMU": false,
 
     "ENABLE_PANO": true,
     "ENABLE_3D": true,
 
-    "ENABLE_VERTEXCOLOUR": true,
+    "ENABLE_VERTEXCOLOUR": false,
     "ENABLE_FILTERING": false,
     
     "SCANS_ROOT": "scans",

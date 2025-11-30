@@ -166,7 +166,7 @@ def process_raw(config, save=True):
     print("Merging 2D points to 3D (NumPy backend)...")
     array_3D = merge_2D_points(
         raw_scan,
-        position_offset=(0, config.get("3D", "Y_OFFSET"), 0),
+        position_offset=(0, 0, 0),  # Apply Y offset separately after inversion
         angle_offset=config.get("LIDAR", "LIDAR_OFFSET_ANGLE"),
         up_vector=(0, 0, 1),
     )
@@ -188,8 +188,11 @@ def process_raw(config, save=True):
         array_3D = array_3D[::stride]
         print(f"Downsampled to {array_3D.shape[0]} points with stride {stride}.")
 
-    # Z offset, invert Z axis, and scale on numpy
-    array_3D[:, 2] += config.get("3D", "Z_OFFSET")
+    # Y and Z offset, invert Y and Z axes, and scale on numpy
+    # Apply inverted offsets: positive offset shifts in negative direction after inversion
+    array_3D[:, 1] -= config.get("3D", "Y_OFFSET")  # Subtract Y_OFFSET
+    array_3D[:, 1] *= -1  # Invert Y axis (mirror Y coordinates)
+    array_3D[:, 2] -= config.get("3D", "Z_OFFSET")  # Subtract Z_OFFSET
     array_3D[:, 2] *= -1  # Invert Z axis (points above scanner should be positive)
     scene_scale = config.get("3D", "SCALE")
     if scene_scale != 1:
