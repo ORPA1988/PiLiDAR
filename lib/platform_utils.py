@@ -37,7 +37,7 @@ def is_raspberry_pi_5():
     Returns True if Pi 5, False otherwise.
     """
     try:
-        with open('/proc/device-tree/model', 'r') as f:
+        with open('/proc/device-tree/model', 'r', encoding='utf-8') as f:
             model = f.read()
             return 'Raspberry Pi 5' in model
     except (FileNotFoundError, IOError):

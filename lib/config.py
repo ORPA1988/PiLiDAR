@@ -184,6 +184,11 @@ class Config:
         relay_pin = self.get("STEPPER", "RELAY_PIN")
         self.relay_device = OutputDevice(relay_pin)
 
+    def close_gpio(self):
+        """Close GPIO resources when done"""
+        if hasattr(self, 'relay_device') and self.relay_device is not None:
+            self.relay_device.close()
+
 
 def format_value(value, digits):
     try:
