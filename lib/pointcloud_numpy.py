@@ -203,9 +203,10 @@ def process_raw(config, save=True):
     post_centroid = np.mean(pts2_valid, axis=0)
     print(f"Post-offset bounds X[{post_lo[0]:.3f},{post_hi[0]:.3f}] Y[{post_lo[1]:.3f},{post_hi[1]:.3f}] Z[{post_lo[2]:.3f},{post_hi[2]:.3f}] centroid {post_centroid}")
 
-    # Filter out invalid points: remove NaN/Inf and extreme outliers (beyond ±10m after scale)
+    # Filter out invalid points: remove NaN/Inf and extreme outliers (beyond ±OUTLIER_THRESHOLD after scale)
     pts_clean = array_3D[:, 0:3]
-    valid_mask = np.isfinite(pts_clean).all(axis=1) & (np.abs(pts_clean) < 10).all(axis=1)
+    outlier_threshold = config.get("3D", "OUTLIER_THRESHOLD", fallback=10)
+    valid_mask = np.isfinite(pts_clean).all(axis=1) & (np.abs(pts_clean) < outlier_threshold).all(axis=1)
     array_3D_clean = array_3D[valid_mask]
     pts_removed = array_3D.shape[0] - array_3D_clean.shape[0]
     if pts_removed > 0:
