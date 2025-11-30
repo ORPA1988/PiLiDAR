@@ -26,6 +26,8 @@ except:
 platform = get_platform()
 if platform == 'RaspberryPi':
     from gpiozero import OutputDevice  # type: ignore
+else:
+    OutputDevice = None  # type: ignore
 
 
 class Config:
@@ -119,8 +121,9 @@ class Config:
         if self.platform == 'RaspberryPi':
             print("Platform: Raspberry Pi")
             
-            # Ensure access to serial port on Raspberry Pi
-            allow_serial()
+            # Ensure access to GPIO serial on Raspberry Pi only when enabled
+            if self.get("LIDAR", "GPIO_SERIAL", "ENABLE"):
+                allow_serial()
 
             self.gpio_setup()  # enable GPIO Ports
 
@@ -179,7 +182,10 @@ class Config:
     def gpio_setup(self, debug=False):
         # Initialize power relay using gpiozero (compatible with Pi 4 and Pi 5)
         relay_pin = self.get("STEPPER", "RELAY_PIN")
-        self.relay_device = OutputDevice(relay_pin)
+        if OutputDevice is not None:
+            self.relay_device = OutputDevice(relay_pin)
+        else:
+            self.relay_device = None
 
     def close_gpio(self):
         """Close GPIO resources when done"""
