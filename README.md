@@ -31,17 +31,25 @@ klick the images to open the pointclouds in Sketchfab.
 *Interior Scan (Vertex Colors)*
 
 
-## Hardware Specs:
+## Hardware Specs / Bill of Materials:
 
-- LDRobot LD06, LD19 or STL27L LiDAR
-- Raspberry Pi HQ Camera with ArduCam M12 Lens [(M25156H18, p.7)](https://www.arducam.com/doc/Arducam_M12_Lens_Kit_for_Pi_HQ_Camera.pdf)
-- Raspberry Pi 4
-- NEMA17 42-23 stepper with A4988 driver
+- Lidar:
+  - One of:
+    - LDRobot LD06: $80 ([link](https://www.aliexpress.us/item/3256803352905216.html))
+    - LDRobot LD19: $70 ([link](https://www.amazon.com/DTOF-D300-Distance-Obstacle-Education/dp/B0B1V8D36H))
+    - LDRobot STL27L: $160 ([link](https://www.dfrobot.com/product-2726.html))
+- Camera and Lens:
+  - Raspberry Pi HQ Camera with ArduCam M12 Lens: $60 ([M25156H18, p.7](https://www.arducam.com/doc/Arducam_M12_Lens_Kit_for_Pi_HQ_Camera.pdf)) ([link](https://www.arducam.com/doc/Arducam_M12_Lens_Kit_for_Pi_HQ_Camera.pdf))
+- Raspberry Pi 4: $50
+- NEMA17 42-23 stepper with A4988 driver: $10 ([link](https://www.amazon.com/SIMAX3D-Nema17-Stepper-Motor/dp/B0CQLFNSMJ))
+- Power Supply:
+  - One of:
+    - [v1]: 2x _18650_ Batteries (7.2V) with step-down converter
+    - [v2]: 10.000 mAh USB Powerbank with step-up converter
 
-- Power Supply: 
-    - v1: 2x _18650_ Batteries (7.2V) with step-down converter
-    - v2: 10.000 mAh USB Powerbank with step-up converter
+*Total:* \~ $200 - $280 (in April of 2025) (not including power supply)
 
+(links are only for example, not necessarily the recommended way to purchase)
 
 ![PiLiDAR v1](images/pilidar_covershot.jpg)
 *Rev. 1 using 2x 18650 Batteries and Buck Converter*
