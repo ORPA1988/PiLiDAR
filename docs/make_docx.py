@@ -170,10 +170,44 @@ def build():
     ])
     img(doc, os.path.join(IMG, "scan_vorgang.png"), caption="Scan-Vorgang: Aufbau, Offset, Punkt-Berechnung")
 
-    h(doc, "6.1  Modus A — schrittweise (Original)", 2)
+    h(doc, "6.1  Koordinatensystem & Offsets (technische Zeichnung)", 2)
+    para(doc, "Es gilt ein rechtshändiges Koordinatensystem (X×Y=Z) mit Ursprung O auf der "
+              "Drehachse: +Z senkrecht nach oben (= Drehachse, Revolve-Achse), +Y horizontal "
+              "entlang der LiDAR-Spinachse, +X quer dazu. Maße in mm, Winkel in Grad.")
+    img(doc, os.path.join(IMG, "geometrie_koordinaten.png"),
+        caption="Koordinatensystem & bemaßte Offsets (Ansicht A: Y-Z-Ebene, Ansicht B: Scan-Ebene X-Z)")
+
+    h(doc, "6.1.1  angle_offset — präzise Bedeutung", 3)
+    para(doc, "angle_offset ist eine Drehung der Messpunkte um die Y-Achse — und Y ist die Normale "
+              "der vertikalen Scan-Ebene (X-Z). Da die Punkte in dieser Ebene liegen, ist eine "
+              "Drehung um Y mathematisch IDENTISCH mit einer Verschiebung des Nullwinkels jedes "
+              "Messpunkts INNERHALB der Ebene:")
+    para(doc, "Rot_Y(φ)·(r·cos α, 0, r·sin α) = (r·cos(α−φ), 0, r·sin(α−φ))   ⇒   α → α − φ", italic=True)
+    para(doc, "Physikalisch korrigiert angle_offset damit die rotatorische Einbau-„Clockung“ des "
+              "LiDAR um seine eigene Spinachse (Y): den Versatz zwischen dem internen 0°-Bezug des "
+              "Sensors und der gewünschten Null der Scan-Ebene. Es ist KEINE Verkippung aus der "
+              "Ebene heraus (das wäre eine Drehung um X oder Z), sondern eine reine "
+              "In-Ebenen-Winkelkorrektur. Typwert hier: −1,05°.")
+
+    h(doc, "6.1.2  Warum die Offsets in Achsrichtung negativ sind", 3)
+    para(doc, "position_offset = (0, MODEL_Y, MODEL_Z) ist die Lage des LiDAR-Optikzentrums S "
+              "relativ zum Ursprung O. Das Vorzeichen folgt aus der Wahl des Koordinatensystems, "
+              "nicht aus einer physikalischen Notwendigkeit:")
+    bullets(doc, [
+        "MODEL_Y = −37,5 mm: S liegt auf der −Y-Seite der Drehachse (gegen die gewählte +Y-Richtung der Spinachse).",
+        "MODEL_Z = −41,9 mm: S liegt baulich UNTERHALB des Datums O (gegen +Z nach oben).",
+        "Die Translation wird VOR der Z-Revolve angewandt, damit die Drehachse durch den Ursprung verläuft — sie verschiebt die Sensorpunkte auf die Achse.",
+        "Bei umgekehrter +Y/+Z-Definition oder anderem Datum kehrten sich die Vorzeichen entsprechend um.",
+    ])
+    para(doc, "Wichtige Eigenschaft von MODEL_Z: Da die Revolve um Z die Z-Komponente nicht "
+              "verändert, wirkt ein MODEL_Z-Fehler als reine vertikale Verschiebung der GESAMTEN "
+              "Wolke — er verzerrt die Geometrie NICHT, sondern legt nur das Höhen-Datum fest. "
+              "MODEL_Y dagegen ist der Hebelarm der Revolve und beeinflusst die Form unmittelbar.")
+
+    h(doc, "6.2  Modus A — schrittweise (Original)", 2)
     para(doc, "Der Motor bewegt sich in diskreten Schritten mit kurzer Setzpause; z_angle ist je "
               "Schritt konstant. Folge: ruckelige Bewegung, Setzpausen, geringe Vibrationen.")
-    h(doc, "6.2  Modus B — kontinuierliche konstante Drehung (neu)", 2)
+    h(doc, "6.3  Modus B — kontinuierliche konstante Drehung (neu)", 2)
     para(doc, "Der Motor dreht mit konstanter Winkelgeschwindigkeit ω. Erzeugt wird sie jitterfrei "
               "über Hardware-PWM am STEP-Pin (GPIO19 = PWM-Kanal 1):")
     para(doc, "ω = f_PWM / (microsteps · gear_ratio) · step_angle   [°/s]", italic=True)
@@ -197,6 +231,26 @@ def build():
         "Offset (MODEL_Y/Z) + angle_offset: Selbstkonsistenz-Optimierung in der Überlappungszone (>180°); schätzt Δ mit.",
         "Ausrichtung: geführter manueller Wand-Check zur Verifikation der vertikalen Scan-Ebene.",
     ])
+    h(doc, "7.1  Automatische Ermittelbarkeit & Zuverlässigkeit", 2)
+    para(doc, "Können ALLE Offsets automatisch durch eine Kalibrierfahrt bestimmt werden? — "
+              "Größtenteils ja, mit einer wichtigen Ausnahme (MODEL_Z). Entscheidend ist die "
+              "Beobachtbarkeit aus den Eigendaten:")
+    table(doc, ["Parameter", "Auto-Kalibrierung", "Beobachtbarkeit / Methode", "Zuverlässigkeit"], [
+        ["gear_ratio (Schritte/Grad)", "ja", "360°-Lauf, Kreuzkorrelation der Profile", "hoch in strukturierten Räumen; schwach bei symmetrischen/leeren Szenen"],
+        ["angle_offset (Clocking)", "ja", "Selbstkonsistenz φ/φ+180° (rotatorischer Versatz)", "hoch; Nahbereichsstruktur trennt es von MODEL_Y"],
+        ["MODEL_Y (Hebelarm)", "ja", "Parallaxe in der Überlappung skaliert mit MODEL_Y", "mittel–hoch; braucht variierte Distanzen"],
+        ["MODEL_Z (Höhen-Datum)", "nein", "nicht beobachtbar — nur globaler vertikaler Versatz, keine Verzerrung", "nicht nötig; aus Mechanik/externer Referenz (z.B. Boden) setzen"],
+        ["overlap Δ (>180°)", "ja", "wird in der Offset-Optimierung mitgeschätzt", "gut"],
+    ])
+    para(doc, "Voraussetzungen für verlässliche Ergebnisse: Szene mit Struktur (keine leeren/"
+              "symmetrischen Räume), variierte Distanzen (Nah- und Fernbereich), ausreichend "
+              "Überlappungspunkte, KEIN Schrittverlust während des Kalibrierscans (sonst wird die "
+              "Annahme konstanter ω verletzt). Der Optimierer wird mit den mechanischen "
+              "Nennwerten gestartet, um lokale Minima zu vermeiden. angle_offset und MODEL_Y "
+              "können im Fernbereich leicht korrelieren (eine kleine Clockung sieht aus wie ein "
+              "kleiner seitlicher Versatz) — Nahbereichsstruktur löst diese Mehrdeutigkeit. "
+              "Das Loop-Closure-Residuum (AP/QA) dient zugleich als Gütemaß: sinkt es nach der "
+              "Kalibrierung deutlich, sind die Parameter konsistent.")
 
     # 8 QA
     h(doc, "8  Fehlererkennung & Qualitätssicherung", 1)
