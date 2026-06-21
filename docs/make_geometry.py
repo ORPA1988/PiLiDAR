@@ -150,11 +150,11 @@ def view_B(ax):
     ax.text(0, 56, "z_angle: Revolve der Ebene um Z", fontsize=8.5, color="#16a34a", ha="center")
 
 
-def title_block(fig):
+def title_block(fig, title):
     ax = fig.add_axes([0.62, 0.02, 0.36, 0.16]); ax.axis("off")
     ax.add_patch(Rectangle((0, 0), 1, 1, transform=ax.transAxes, fill=False, ec=INK, lw=1.2))
     rows = [
-        ("Titel", "Mess-Koordinatensystem & Offsets"),
+        ("Titel", title),
         ("Projekt", "PiLiDAR 2.0"),
         ("Einheit", "mm   ·   Winkel in Grad"),
         ("System", "rechtshändig: X×Y=Z"),
@@ -166,26 +166,137 @@ def title_block(fig):
         ax.text(0.34, y, v, fontsize=8, color=INK)
 
 
+def frame(fig):
+    b = fig.add_axes([0, 0, 1, 1]); b.axis("off")
+    b.add_patch(Rectangle((0.01, 0.01), 0.98, 0.98, transform=b.transAxes,
+                fill=False, ec=INK, lw=1.5))
+
+
+def _save(fig, name):
+    for ext in ("png", "svg"):
+        fig.savefig(os.path.join(OUT, f"{name}.{ext}"), dpi=300,
+                    facecolor="white", bbox_inches="tight")
+    plt.close(fig)
+    print("ok", name)
+
+
 def build():
     fig = plt.figure(figsize=(15, 8))
     fig.patch.set_facecolor("white")
     fig.suptitle("PiLiDAR 2.0 — Technische Zeichnung: Koordinatensystem & Offsets",
                  fontsize=14, fontweight="bold", y=0.97)
-    ax1 = fig.add_axes([0.04, 0.20, 0.44, 0.70])
-    ax2 = fig.add_axes([0.52, 0.20, 0.44, 0.70])
-    view_A(ax1)
-    view_B(ax2)
-    title_block(fig)
-    # Rahmen
-    border = fig.add_axes([0, 0, 1, 1]); border.axis("off")
-    border.add_patch(Rectangle((0.01, 0.01), 0.98, 0.98, transform=border.transAxes,
-                     fill=False, ec=INK, lw=1.5))
-    for ext in ("png", "svg"):
-        fig.savefig(os.path.join(OUT, f"geometrie_koordinaten.{ext}"), dpi=300,
-                    facecolor="white", bbox_inches="tight")
-    plt.close(fig)
-    print("ok geometrie_koordinaten")
+    view_A(fig.add_axes([0.04, 0.20, 0.44, 0.70]))
+    view_B(fig.add_axes([0.52, 0.20, 0.44, 0.70]))
+    title_block(fig, "Mess-Koordinatensystem & Offsets")
+    frame(fig)
+    _save(fig, "geometrie_koordinaten")
+
+
+# ---------------------------------------------------------------------
+def montage_view(ax):
+    ax.set_title("Baugruppe — Schnitt Y-Z-Ebene (Blick entlang +X)", fontsize=11, fontweight="bold")
+    ax.set_xlim(-70, 70); ax.set_ylim(-15, 115); ax.set_aspect("equal"); ax.axis("off")
+
+    # Drehachse (Mittellinie) durch die ganze Höhe
+    centerline(ax, 0, -10, 0, 110)
+    ax.text(2, 107, "Drehachse Z", fontsize=8.5, color=INK)
+
+    # Sockel / Motor+Getriebe / Rotorplatte
+    ax.add_patch(Rectangle((-45, -8), 90, 8, fc="#e9eef5", ec=INK, lw=1.2))     # Sockel
+    ax.text(0, -12, "Sockel (fest)", fontsize=8, color=INK, ha="center")
+    ax.add_patch(Rectangle((-16, 0), 32, 22, fc="#dfe6ef", ec=INK, lw=1.2))     # Motor+Getriebe
+    ax.text(0, 11, "Motor + Getriebe", fontsize=7.5, color=INK, ha="center")
+    ax.add_patch(Rectangle((-40, 22), 80, 6, fc="#cdd8e6", ec=INK, lw=1.2))     # Rotorplatte
+    ax.text(-41, 25, "Rotorplatte (dreht um Z)", fontsize=7.5, color=INK, ha="right")
+    # Rotationssymbol
+    ax.add_patch(Arc((0, 28), 26, 10, theta1=200, theta2=-20, color="#16a34a", lw=1.4))
+    ax.annotate("", xy=(13, 30), xytext=(11, 25),
+                arrowprops=dict(arrowstyle="-|>", color="#16a34a", lw=1.4))
+    ax.text(16, 31, "z_angle", fontsize=8, color="#16a34a")
+
+    # Rückplatte (senkrecht) + LiDAR auf der Seite
+    ax.add_patch(Rectangle((6, 28), 5, 70, fc="#cdd8e6", ec=INK, lw=1.2))       # Rückplatte
+    ax.text(-13, 50, "Rückplatte\n(senkrecht)", fontsize=7.5, color=INK, ha="right")
+    sy = 70  # Höhe Sensorzentrum
+    ax.add_patch(Rectangle((11, sy - 18), 34, 36, fc="#f2dede", ec=ACC, lw=1.5))  # LiDAR
+    ax.text(28, sy + 26, "STL27L (auf der Seite)", fontsize=8.5, color=ACC, ha="center")
+    ax.add_patch(Circle((11, sy), 1.6, fc=ACC, ec=ACC))
+    ax.text(11, sy - 24, "Optikzentrum S", fontsize=7.5, color=ACC, ha="center")
+
+    # Koordinatentriade am Ursprung O (auf der Drehachse, Höhe Rotorplatte-Oberkante als Datum? -> O bei 0)
+    axis_arrow(ax, 0, 40, 0, 62, "Z")
+    axis_arrow(ax, 0, 40, 22, 40, "Y")
+    into_page(ax, 0, 40, "X")
+    ax.text(2, 37, "O", fontsize=9, color=INK)
+
+    # Spinachse Y horizontal aus dem Sensor
+    axis_arrow(ax, 11, sy, 52, sy, "Y (Spinachse, horizontal)", color="#b45309")
+    # Scan-Ebene X-Z (in dieser Ansicht edge-on = senkrechte Linie durch S)
+    ax.plot([11, 11], [sy - 40, sy + 40], color="#22d3ee", lw=1.3, dashes=[6, 3])
+    ax.text(-30, 100, "Scan-Ebene X-Z\n(vertikal, senkr. zum Bild)", fontsize=7.5, color="#0e7490", ha="left")
+
+    # Bemaßung: Sensorhöhe und Y-Versatz der Rückplatte
+    dim_linear(ax, (0, 0), (0, sy), "center_height (Z)", off=0, vertical=True, side=-1)
+    dim_linear(ax, (0, sy), (11, sy), "axis_offset (Y)", off=14, side=1)
+
+    # Orientierung
+    ax.text(-66, 100, "OBEN ↑", fontsize=9, color=INK, fontweight="bold")
+    ax.text(-66, -6, "UNTEN ↓", fontsize=9, color=INK, fontweight="bold")
+    ax.text(-66, 60, "Hinweis: Bodenplatte des\nLiDAR steht SENKRECHT an\nder Rückplatte; Optikfenster\nrundum frei halten.",
+            fontsize=7.5, color="#444")
+
+
+def build_montage():
+    fig = plt.figure(figsize=(13, 8)); fig.patch.set_facecolor("white")
+    fig.suptitle("PiLiDAR 2.0 — Technische Zeichnung: LiDAR-Montage & Ausrichtung",
+                 fontsize=14, fontweight="bold", y=0.97)
+    montage_view(fig.add_axes([0.06, 0.20, 0.6, 0.70]))
+    title_block(fig, "LiDAR-Montage (Seitenmontage)")
+    frame(fig)
+    _save(fig, "lidar_montage")
+
+
+# ---------------------------------------------------------------------
+def scanprocess_view(ax):
+    ax.set_title("Messkette — vom Strahl zum 3D-Punkt", fontsize=11, fontweight="bold")
+    ax.set_xlim(-30, 70); ax.set_ylim(-30, 60); ax.set_aspect("equal"); ax.axis("off")
+    # nutzt dieselbe Scan-Ebenen-Darstellung wie Ansicht B
+    view_B(ax)
+
+
+def build_scanprocess():
+    fig = plt.figure(figsize=(15, 8)); fig.patch.set_facecolor("white")
+    fig.suptitle("PiLiDAR 2.0 — Technische Zeichnung: Scan-Vorgang & Punkt-Berechnung",
+                 fontsize=14, fontweight="bold", y=0.97)
+    # links: Messgeometrie (Scan-Ebene), rechts: Rechenkette als Notizblock
+    view_B(fig.add_axes([0.04, 0.20, 0.44, 0.70]))
+    ax2 = fig.add_axes([0.52, 0.20, 0.44, 0.70]); ax2.axis("off")
+    ax2.set_xlim(0, 10); ax2.set_ylim(0, 10)
+    ax2.add_patch(Rectangle((0.2, 0.5), 9.6, 9.0, fill=False, ec=INK, lw=1.0))
+    ax2.text(0.5, 9.0, "Rechenkette pro Messpunkt (α, r):", fontsize=10, fontweight="bold", color=INK)
+    steps = [
+        "1)  Ebene:  P = (r·cos α, 0, r·sin α)        [X-Z, y=0]",
+        "2)  Y-Rotation um angle_offset  (In-Ebenen-Clocking)",
+        "3)  + Offset  (0, MODEL_Y, MODEL_Z)",
+        "4)  Z-Rotation um −z_angle  (Revolve um Drehachse)",
+        "",
+        "z_angle:",
+        "   Modus A  →  konstant je Schritt",
+        "   Modus B  →  z_angle = ω · Δt   (kontinuierlich)",
+        "",
+        "Einheiten: Längen in mm, Winkel in Grad.",
+        "Reihenfolge ist verbindlich (Offset VOR Revolve).",
+    ]
+    for i, s in enumerate(steps):
+        ax2.text(0.5, 8.2 - i * 0.66, s, fontsize=9,
+                 family="monospace" if s.strip().startswith(("1", "2", "3", "4", "z_angle", "Modus")) else "sans-serif",
+                 color=INK)
+    title_block(fig, "Scan-Vorgang & Punkt-Berechnung")
+    frame(fig)
+    _save(fig, "scan_vorgang")
 
 
 if __name__ == "__main__":
     build()
+    build_montage()
+    build_scanprocess()
