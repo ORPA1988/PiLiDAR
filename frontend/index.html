@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PiLiDAR 2.0</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header>
+    <h1>PiLiDAR&nbsp;2.0</h1>
+    <span id="state" class="badge">–</span>
+    <span id="qa" class="badge"></span>
+  </header>
+
+  <main>
+    <section class="panel controls">
+      <h2>Steuerung</h2>
+
+      <div class="group">
+        <button id="btnLidar">2D-Live (nur LiDAR)</button>
+        <button id="btnLidarStop" class="secondary">LiDAR stoppen</button>
+      </div>
+
+      <div class="group">
+        <label>Messtechnik
+          <select id="mode">
+            <option value="B">B – kontinuierlich (ruckelfrei)</option>
+            <option value="A">A – schrittweise (Original)</option>
+          </select>
+        </label>
+        <label>Name <input id="name" type="text" placeholder="optional" /></label>
+        <button id="btnScan" class="primary">Scan starten</button>
+        <button id="btnStop" class="danger">Stop</button>
+      </div>
+
+      <div class="group">
+        <strong>Kalibrierung</strong>
+        <button id="btnCalRot" class="secondary">Rotation (360°)</button>
+        <button id="btnCalOff" class="secondary">Offset (&gt;180°)</button>
+        <pre id="calOut" class="out"></pre>
+      </div>
+
+      <div class="group">
+        <strong>Anzeige</strong>
+        <label><input type="radio" name="view" value="2d" checked /> 2D-Polar</label>
+        <label><input type="radio" name="view" value="3d" /> 3D-Punktwolke</label>
+        <button id="btnClear" class="secondary">Ansicht leeren</button>
+        <button id="btnPly" class="secondary">PLY exportieren</button>
+      </div>
+
+      <div class="group stats">
+        <div>Winkel: <b id="stAngle">0</b>°</div>
+        <div>Pakete/s: <b id="stRate">0</b></div>
+        <div>CRC-Fehler: <b id="stCrc">0</b>%</div>
+        <div>Punkte: <b id="stPts">0</b></div>
+      </div>
+    </section>
+
+    <section class="panel view">
+      <canvas id="view2d"></canvas>
+      <canvas id="view3d" class="hidden"></canvas>
+    </section>
+
+    <section class="panel scans">
+      <h2>Scans</h2>
+      <button id="btnRefresh" class="secondary">Aktualisieren</button>
+      <ul id="scanList"></ul>
+    </section>
+  </main>
+
+  <script src="js/viewer2d.js"></script>
+  <script src="js/viewer3d.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,14 +1,21 @@
-# temps
-.vscode
-.ipynb_checkpoints
-__pycache__
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Scan-Daten / Laufzeit
+scans/
+tests/_scans_tmp/
+tests/_scans_dbg/
+
+# OS
 Thumbs.db
+.DS_Store
 
-# box-pano for UV mapping
-meshlab/tmp/*
+# Editor
+.vscode/
+.idea/
 
-# data directory
-/scans/
-
-# usb_dump
-usb_dump/
+# Claude Code lokal
+.claude/settings.local.json

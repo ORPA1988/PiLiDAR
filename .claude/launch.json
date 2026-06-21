@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pilidar-mock",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["scripts/run_mock.py"],
+      "port": 8012
+    }
+  ]
+}
