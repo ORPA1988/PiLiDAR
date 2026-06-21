@@ -29,7 +29,7 @@
   "MODE_B_CONTINUOUS": {
     "SCAN_ANGLE": 184.0,
     "OVERLAP_DEG": 4.0,
-    "SPEED_DPS": 1.87,
+    "SPEED_DPS": 1.67,
     "ACCEL_DPS2": 10.0,
     "PWM_CHANNEL": 1
   },
