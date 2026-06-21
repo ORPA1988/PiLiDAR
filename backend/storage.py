@@ -117,6 +117,22 @@ class ScanStore:
             fh.write(arr.tobytes())
 
     # ------------------------------------------------------------------
+    def delete_scan(self, scan_id: str) -> None:
+        import shutil
+        d = self.scan_dir(scan_id)
+        if d.exists() and d.parent.resolve() == self.base.resolve():
+            shutil.rmtree(d)
+
+    def update_annotation(self, scan_id: str, text: str) -> None:
+        meta_path = self.scan_dir(scan_id) / "meta.json"
+        if meta_path.exists():
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        else:
+            meta = {"id": scan_id}
+        meta["annotation"] = text
+        meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    # ------------------------------------------------------------------
     def zip_bytes(self, scan_id: str) -> bytes:
         d = self.scan_dir(scan_id)
         buf = io.BytesIO()

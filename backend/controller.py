@@ -179,10 +179,18 @@ class ScanController:
         cfg = self.cfg.MODE_A_STEPWISE
         scan_angle = cfg["SCAN_ANGLE"]
         spm = max(1, int(cfg["STEPS_PER_MEASURE"]))
-        delay = cfg["SCAN_DELAY"]
+        delay = float(cfg["SCAN_DELAY"])
+        max_pkgs = int(cfg["MAX_PACKAGES"])
+        timeout = delay * 5  # maximale Wartezeit pro Schritt
+
         while self.stepper.get_current_angle() < scan_angle and self.state == STATE_SCANNING:
             self.stepper.move_steps(spm)
-            time.sleep(delay)
+            pkgs_before = self.lidar.stats.packets_ok
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline and self.state == STATE_SCANNING:
+                if self.lidar.stats.packets_ok - pkgs_before >= max_pkgs:
+                    break
+                time.sleep(0.005)
 
     def _run_mode_b(self) -> None:
         cfg = self.cfg.MODE_B_CONTINUOUS

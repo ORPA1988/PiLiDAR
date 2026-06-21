@@ -39,6 +39,7 @@ class Viewer3D {
   constructor(canvas) {
     this.canvas = canvas;
     const gl = this.gl = canvas.getContext('webgl', { antialias: true });
+    if (!gl) { console.error('WebGL nicht verfügbar'); return; }
     this.prog = this._program(VERT, FRAG);
     this.aPos = gl.getAttribLocation(this.prog, 'aPos');
     this.aInt = gl.getAttribLocation(this.prog, 'aInt');
@@ -114,6 +115,7 @@ class Viewer3D {
   }
 
   _loop() {
+    if (!this.gl) return;
     this._flush();
     const gl = this.gl, W = this.canvas.width, H = this.canvas.height;
     gl.viewport(0, 0, W, H); gl.clearColor(0.02, 0.03, 0.04, 1);

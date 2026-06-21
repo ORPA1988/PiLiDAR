@@ -78,6 +78,12 @@ class LidarStats:
     bytes_read: int = 0
     last_speed_dps: float = 0.0
     started_at: float = field(default_factory=time.monotonic)
+    _final_rate: float | None = field(default=None, init=False, repr=False)
+
+    def freeze(self) -> None:
+        """Rate beim Stopp einfrieren, damit sie danach nicht weiter sinkt."""
+        dt = max(1e-6, time.monotonic() - self.started_at)
+        self._final_rate = self.packets_ok / dt
 
     @property
     def crc_error_rate(self) -> float:
@@ -86,6 +92,8 @@ class LidarStats:
 
     @property
     def packet_rate(self) -> float:
+        if self._final_rate is not None:
+            return self._final_rate
         dt = max(1e-6, time.monotonic() - self.started_at)
         return self.packets_ok / dt
 
@@ -142,6 +150,7 @@ class LidarReader:
         self._thread.start()
 
     def stop(self) -> None:
+        self.stats.freeze()
         self._running.clear()
         if self._thread is not None:
             self._thread.join(timeout=2.0)
