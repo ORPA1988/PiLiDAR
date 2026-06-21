@@ -99,6 +99,21 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .view canvas { width: 100%; height: 100%; display: block; border-radius: 10px; background: #05070a; }
 .hidden { display: none !important; }
 
+/* 3D-Achsen-Overlay (HTML-Labels über dem WebGL-Canvas) */
+.v3d-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.v3d-axis-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font: 600 13px/1 system-ui, sans-serif;
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
+  white-space: nowrap;
+}
+.v3d-scale {
+  position: absolute; left: 10px; bottom: 10px;
+  font: 12px/1 system-ui, sans-serif; color: var(--muted);
+  text-shadow: 0 0 3px #000;
+}
+
 .out { background: #0a0d12; padding: 8px; border-radius: 6px; font-size: 11px; color: var(--muted); white-space: pre-wrap; max-height: 120px; overflow: auto; }
 
 #scanList { list-style: none; padding: 0; margin: 0; }

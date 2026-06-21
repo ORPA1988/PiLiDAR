@@ -75,12 +75,20 @@ $('btnCalOff').onclick = async () => {
       angle_offset: r.angle_offset, model_y_offset: r.model_y_offset, model_z_offset: r.model_z_offset }) });
 };
 
-document.querySelectorAll('input[name=view]').forEach(r => r.onchange = () => {
+function applyViewMode() {
   viewMode = document.querySelector('input[name=view]:checked').value;
   $('view2d').classList.toggle('hidden', viewMode !== '2d');
   $('view3d').classList.toggle('hidden', viewMode !== '3d');
-  if (viewMode === '3d') v3d._resize();
-});
+  const ov = document.querySelector('.v3d-labels');
+  if (ov) ov.classList.toggle('hidden', viewMode !== '3d');
+  if (viewMode === '3d') {
+    v2d.stop();        // 2D-Loop pausieren, spart Rechenzeit
+    v3d._resize();     // Canvas war evtl. 0×0 während hidden
+  } else {
+    v2d.start();       // 2D-Loop wieder aufnehmen (idempotent)
+  }
+}
+document.querySelectorAll('input[name=view]').forEach(r => r.onchange = applyViewMode);
 
 function clearView() {
   v2d.clear(); v3d.clear(); worker.postMessage({ type: 'clear' });
@@ -168,6 +176,7 @@ async function refreshScans() {
       <div class="row">
         <span><span class="dot ${qa}"></span><b>${s.id}</b></span>
         <span style="display:flex;gap:6px;align-items:center">
+          <button class="btn-view3d" data-id="${s.id}" title="In 3D anzeigen">&#128065; 3D</button>
           <a href="/api/scans/${s.id}/download">ZIP</a>
           <button class="btn-del" data-id="${s.id}">&#128465;</button>
         </span>
@@ -179,6 +188,9 @@ async function refreshScans() {
       </div>`;
     ul.appendChild(li);
   }
+  ul.querySelectorAll('.btn-view3d').forEach(btn => {
+    btn.onclick = () => loadScanInto3D(btn.dataset.id);
+  });
   ul.querySelectorAll('.btn-del').forEach(btn => {
     btn.onclick = async () => {
       if (!confirm(`Scan "${btn.dataset.id}" wirklich löschen?`)) return;
@@ -196,5 +208,24 @@ async function refreshScans() {
     };
   });
 }
+// Gespeicherten Scan in die 3D-Ansicht laden
+async function loadScanInto3D(scanId) {
+  clearView();
+  // auf 3D-Ansicht umschalten
+  const radio3d = document.querySelector('input[name=view][value=3d]');
+  radio3d.checked = true;
+  applyViewMode();
+  try {
+    const r = await api(`/api/scans/${scanId}/pointcloud`);
+    if (!r.ok) { alert('Punktwolke nicht gefunden.'); return; }
+    const data = await r.json();
+    v3d.addPoints(new Float32Array(data.xyz), new Float32Array(data.inten));
+    totalPoints = data.total;
+    $('stPts').textContent = totalPoints.toLocaleString('de-DE');
+  } catch (e) {
+    alert('Fehler beim Laden der Punktwolke.');
+  }
+}
+
 $('btnRefresh').onclick = refreshScans;
 refreshScans();

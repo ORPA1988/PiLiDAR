@@ -63,11 +63,13 @@ class Viewer2D {
     ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
 
     // Punkte
+    // Spiegel-Null (LiDAR-Winkel 0) zeigt in +Y-Richtung → im 2D-Plot nach oben.
+    // Im Uhrzeigersinn, damit oben/unten und links/rechts der Realität entsprechen.
     ctx.fillStyle = '#3fb950';
     for (const p of this.points) {
       const a = p.a * Math.PI / 180;
-      const x = cx + Math.cos(a) * p.d * scale;
-      const y = cy - Math.sin(a) * p.d * scale;
+      const x = cx + Math.sin(a) * p.d * scale;
+      const y = cy - Math.cos(a) * p.d * scale;
       ctx.fillRect(x, y, 2 * devicePixelRatio, 2 * devicePixelRatio);
     }
     // Sensor

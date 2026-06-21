@@ -134,8 +134,9 @@ class ScanController:
     def start_scan(self, mode: str = "B", name: str = "") -> str:
         if self.state not in (STATE_IDLE, STATE_LIDAR_ONLY):
             raise RuntimeError(f"Beschäftigt: {self.state}")
-        if self.state == STATE_LIDAR_ONLY:
-            self.lidar.stop()
+        # Den LiDAR-Spiegel beim Übergang aus 2D-Live NICHT aus- und wieder
+        # einschalten – er soll durchgehend laufen. lidar.start() in _run_scan
+        # ist idempotent (No-op, falls bereits aktiv).
         scan_id = datetime.now().strftime("%y%m%d-%H%M%S")
         if name:
             scan_id += "_" + "".join(c for c in name if c.isalnum() or c in "-_")

@@ -94,6 +94,15 @@ async def api_scans():
     return controller.store.list_scans()
 
 
+@app.get("/api/scans/{scan_id}/pointcloud")
+async def api_scan_pointcloud(scan_id: str):
+    """Gespeicherte Punktwolke für die 3D-Anzeige (flache xyz/inten-Listen)."""
+    data = await asyncio.to_thread(controller.store.load_pointcloud, scan_id)
+    if not data.get("total"):
+        return JSONResponse(status_code=404, content={"error": "keine Punktwolke"})
+    return data
+
+
 @app.get("/api/scans/{scan_id}/download")
 async def api_scan_download(scan_id: str):
     data = controller.store.zip_bytes(scan_id)

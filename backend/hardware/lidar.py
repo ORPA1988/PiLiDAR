@@ -121,6 +121,12 @@ class LidarReader:
         self._ser = None
         self._thread: Optional[threading.Thread] = None
         self._running = threading.Event()
+        # Der STL27L-Spiegel dreht ab Werk, sobald er mit Strom versorgt wird
+        # (laut Waveshare-Doku stoppt erst ein "0"). Daher gilt er initial als
+        # "läuft": beim normalen Start wird KEIN "1" gesendet, der Spiegel läuft
+        # einfach durch. Ein "0" geht nur beim expliziten Stopp raus, ein "1" nur,
+        # um nach einem solchen Stopp wieder anzufahren.
+        self._motor_on = True
         self.stats = LidarStats()
 
     # ------------------------------------------------------------------
@@ -141,20 +147,47 @@ class LidarReader:
                 self._ser = None
 
     # ------------------------------------------------------------------
+    def _set_motor(self, on: bool) -> None:
+        """Spiegelmotor schalten (Waveshare STL27L): b'1' = an, b'0' = aus.
+
+        Idempotent: sendet den Befehl nur bei tatsächlichem Zustandswechsel, damit
+        der Spiegel nicht versehentlich mehrfach hoch-/runtergefahren wird. Die
+        ASCII-Zeichen "1"/"0" gehen über denselben Serial-Port (921600 Baud). Im
+        Mock-Modus oder bei Serial-Fehlern wird still ignoriert.
+        """
+        if on == self._motor_on:
+            return
+        ser = self._ser
+        if ser is not None:
+            try:
+                if getattr(ser, "is_open", True):
+                    ser.write(b"1" if on else b"0")
+                    ser.flush()
+            except Exception:
+                pass  # Serial-Schreibfehler nicht propagieren
+        self._motor_on = on
+
+    # ------------------------------------------------------------------
     def start(self) -> None:
+        if self._running.is_set():
+            return  # bereits aktiv – kein zweiter Reader-Thread, kein erneuter Motorbefehl
         if self._ser is None:
             self.open()
+        # No-op falls der Spiegel ohnehin läuft; sendet "1" nur nach einem Stopp.
+        self._set_motor(True)
         self.stats = LidarStats()
         self._running.set()
         self._thread = threading.Thread(target=self._loop, name="LidarReader", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
-        self.stats.freeze()
-        self._running.clear()
+        if self._running.is_set():
+            self.stats.freeze()
+            self._running.clear()
         if self._thread is not None:
             self._thread.join(timeout=2.0)
             self._thread = None
+        self._set_motor(False)  # Spiegelmotor stoppen
 
     @property
     def running(self) -> bool:
