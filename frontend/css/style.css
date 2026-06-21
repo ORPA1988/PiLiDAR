@@ -107,3 +107,49 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 #scanList a { color: var(--accent2); text-decoration: none; }
 #scanList .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
 .dot.ok { background: var(--accent); } .dot.warn { background: var(--warn); } .dot.error { background: var(--danger); }
+.dot.dot-off { background: #3a4554; }
+
+/* System-Stats */
+.sys-stats { gap: 5px; }
+.sys-stats strong { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+
+/* LiDAR-Health */
+.health-row { display: flex; align-items: center; gap: 6px; }
+.health-row .dot { flex-shrink: 0; }
+
+/* Scan-Anmerkung */
+.ann-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 5px;
+}
+.ann-input {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid #2f3845;
+  color: var(--fg);
+  border-radius: 5px;
+  padding: 3px 7px;
+  font-size: 11px;
+}
+.ann-input:focus { outline: none; border-color: var(--accent2); }
+.ann-save {
+  padding: 2px 8px;
+  font-size: 12px;
+  background: var(--panel2);
+  border: 1px solid #2f3845;
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--accent);
+}
+.ann-save:hover { border-color: var(--accent); }
+.btn-del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 0 2px;
+  line-height: 1;
+}
+.btn-del:hover { color: var(--danger); }

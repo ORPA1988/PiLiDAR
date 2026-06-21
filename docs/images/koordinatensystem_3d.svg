@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 600" width="920" height="600"
+     font-family="'Segoe UI', system-ui, sans-serif" font-size="13">
+  <!-- PiLiDAR 2.0 – Koordinatensystem & Sensor-Ausrichtung (3D-Übersicht) -->
+
+  <!-- Hintergrund -->
+  <rect width="920" height="600" fill="#f9fafb" rx="8"/>
+
+  <!-- Titel -->
+  <text x="460" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#111">
+    PiLiDAR 2.0 — Koordinatensystem &amp; Sensor-Ausrichtung (Isometrische Übersicht)
+  </text>
+  <text x="460" y="52" text-anchor="middle" font-size="12" fill="#555">
+    Rechtshändiges System X×Y=Z · Winkel in Grad · Längen in mm (schematisch, nicht maßstäblich)
+  </text>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       LINKES BILD: Isometrische 3D-Ansicht
+       Ursprung O bei (280, 340) im SVG
+       Isometrisch: X → rechts-unten (+30°), Y → links-unten (+150°), Z → oben
+  ════════════════════════════════════════════════════════════════ -->
+  <g transform="translate(280,340)">
+    <!-- Isometrische Richtungsvektoren (px pro 100 mm):
+         X: (cos(-30°)·120, sin(-30°)·120) = (104, -60) → rechts-unten
+         Y: (cos(210°)·120, sin(210°)·120) = (-104, -60) → links-unten  [jetzt: rechts um 30° nach unten angepasst]
+         Z: (0, -130) → oben
+    -->
+
+    <!-- Hilfsraster (leicht grau) - Bodenebene Y-X -->
+    <g stroke="#d0d7de" stroke-width="0.5" opacity="0.6">
+      <!-- X-Richtungslinien bei Y-Offset -->
+      <line x1="-104" y1="60"  x2="0"    y2="0"/>
+      <line x1="-104" y1="60"  x2="104"  y2="120"/><!-- korrigiert -->
+      <!-- Y-Richtungslinien bei X-Offset -->
+    </g>
+
+    <!-- Boden-Parallelogramm (X-Y-Ebene bei Z=0) -->
+    <polygon points="0,0 104,60 0,120 -104,60"
+             fill="#e8f4fd" stroke="#93c5e8" stroke-width="1" opacity="0.6"/>
+    <text x="-45" y="95" font-size="10" fill="#5a9bc2" text-anchor="middle">X-Y-Ebene (Z=0)</text>
+
+    <!-- Rotation z_angle: Bogen auf Bodenebene -->
+    <path d="M 50,29 A 58,33 0 0 1 0,0" fill="none" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="4,2"/>
+    <polygon points="0,-4 -5,4 5,4" transform="translate(1,1) rotate(-20)" fill="#16a34a"/>
+    <text x="62" y="20" font-size="11" fill="#16a34a" font-weight="600">z_angle</text>
+    <text x="62" y="33" font-size="10" fill="#16a34a">(Drehung ⊙ Z)</text>
+
+    <!-- Drehachse Z (vertikal) - gestrichelt unterhalb Ursprung -->
+    <line x1="0" y1="20" x2="0" y2="60" stroke="#888" stroke-width="1" stroke-dasharray="3,3"/>
+
+    <!-- === ACHSEN === -->
+
+    <!-- Z-Achse: gerade nach oben -->
+    <line x1="0" y1="0" x2="0" y2="-170" stroke="#dc2626" stroke-width="2.5"/>
+    <polygon points="0,-178 -5,-163 5,-163" fill="#dc2626"/>
+    <text x="8" y="-175" font-size="14" font-weight="700" fill="#dc2626">Z</text>
+    <text x="8" y="-160" font-size="10" fill="#dc2626">(oben)</text>
+
+    <!-- X-Achse: rechts-unten (isometrisch 30°) -->
+    <line x1="0" y1="0" x2="156" y2="90" stroke="#2563eb" stroke-width="2.5"/>
+    <polygon points="0,0 -7,-3 -4,6" transform="translate(156,90) rotate(30)" fill="#2563eb"/>
+    <text x="164" y="95" font-size="14" font-weight="700" fill="#2563eb">X</text>
+    <text x="164" y="110" font-size="10" fill="#2563eb">(α=0)</text>
+
+    <!-- Y-Achse: links-unten (isometrisch 150°) -->
+    <line x1="0" y1="0" x2="-156" y2="90" stroke="#9333ea" stroke-width="2.5"/>
+    <polygon points="0,0 7,-3 4,6" transform="translate(-156,90) rotate(-30)" fill="#9333ea"/>
+    <text x="-180" y="95" font-size="14" font-weight="700" fill="#9333ea">Y</text>
+    <text x="-185" y="110" font-size="10" fill="#9333ea">(Spinachse)</text>
+
+    <!-- Ursprung O -->
+    <circle cx="0" cy="0" r="4" fill="#111"/>
+    <text x="8" y="-6" font-size="11" fill="#111">O (Datum)</text>
+
+    <!-- Drehachse Z (vertikal, verlängert nach unten) -->
+    <line x1="0" y1="0" x2="0" y2="80" stroke="#888" stroke-width="1.5" stroke-dasharray="5,3"/>
+    <text x="6" y="72" font-size="10" fill="#888">Drehachse</text>
+
+    <!-- Sensor-Position S: MODEL_Y=-37.5mm, MODEL_Z=-41.9mm
+         In iso: Y-Anteil → links-unten(-37.5/100*104, -37.5/100*60) = (-39, -22.5) [negativ Y → positiv in Zeichenrichtung]
+         Z-Anteil → nach unten(0, 41.9/100*130) = (0, +54)
+         Gesamtposition: (-39, -22.5+54) = (-39, +31.5) ... Y negativ → gegenrichtung
+         MODEL_Y = -37.5 → Richtung -Y → (+37.5/100*104, +37.5/100*60) = (+39, +22.5)
+         MODEL_Z = -41.9 → Richtung -Z → (0, +41.9/130*1) = (0, +54)
+         Sensor bei iso: (+39, +22.5+54) = (+39, +76.5)  -->
+    <g transform="translate(39, 76)">
+      <!-- Hilfslinie von Achse zu Sensor -->
+      <line x1="-39" y1="-76" x2="0" y2="0" stroke="#f59e0b" stroke-width="1" stroke-dasharray="4,2"/>
+      <!-- MODEL_Y Pfeil -->
+      <line x1="-39" y1="-76" x2="0" y2="-54" stroke="#9333ea" stroke-width="1.5" stroke-dasharray="5,2"/>
+      <text x="-5" y="-62" font-size="10" fill="#9333ea" text-anchor="end">MODEL_Y=−37.5 mm</text>
+      <!-- MODEL_Z Pfeil -->
+      <line x1="0" y1="-54" x2="0" y2="0" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="5,2"/>
+      <text x="5" y="-25" font-size="10" fill="#dc2626">MODEL_Z=−41.9 mm</text>
+      <!-- Sensor S -->
+      <circle cx="0" cy="0" r="7" fill="#dc2626" opacity="0.9"/>
+      <circle cx="0" cy="0" r="3" fill="white"/>
+      <text x="14" y="4" font-size="12" font-weight="700" fill="#dc2626">S</text>
+      <text x="14" y="17" font-size="10" fill="#555">(LiDAR-Optikzentrum)</text>
+    </g>
+
+  </g><!-- /isometrische Gruppe -->
+
+  <!-- ═══════════════════════════════════════════════════════════
+       RECHTES BILD: Scan-Ebene X-Z (Blick entlang +Y) – Winkel-Null
+  ════════════════════════════════════════════════════════════════ -->
+  <g transform="translate(680,340)">
+
+    <!-- Achsen X und Z -->
+    <line x1="-160" y1="0" x2="160" y2="0" stroke="#2563eb" stroke-width="2"/>
+    <polygon points="160,0 150,-5 150,5" fill="#2563eb"/>
+    <text x="168" y="5" font-size="14" font-weight="700" fill="#2563eb">X</text>
+
+    <line x1="0" y1="150" x2="0" y2="-180" stroke="#dc2626" stroke-width="2"/>
+    <polygon points="0,-180 -5,-170 5,-170" fill="#dc2626"/>
+    <text x="8" y="-178" font-size="14" font-weight="700" fill="#dc2626">Z</text>
+
+    <!-- Y aus Ebene heraus -->
+    <circle cx="0" cy="0" r="7" fill="none" stroke="#9333ea" stroke-width="2"/>
+    <circle cx="0" cy="0" r="2" fill="#9333ea"/>
+    <text x="-30" y="-12" font-size="11" fill="#9333ea">⊙ Y</text>
+    <text x="-30" y="-25" font-size="10" fill="#9333ea">(aus Ebene)</text>
+
+    <!-- Sensor S im Mittelpunkt -->
+    <circle cx="0" cy="0" r="6" fill="#dc2626" opacity="0.9"/>
+    <circle cx="0" cy="0" r="2.5" fill="white"/>
+    <text x="-20" y="20" font-size="11" font-weight="700" fill="#dc2626">S (Sensor)</text>
+
+    <!-- Messstrahl bei α=0 (nominell): Richtung +X -->
+    <line x1="0" y1="0" x2="140" y2="0" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="6,3"/>
+    <text x="100" y="-8" font-size="11" fill="#2563eb">α = 0°</text>
+    <text x="100" y="-22" font-size="10" fill="#2563eb">(nominell)</text>
+
+    <!-- Messstrahl bei tatsächlicher Null (angle_offset = -1.05°) -->
+    <!-- cos(-1.05°)=0.9998, sin(-1.05°)=-0.0183 → fast gleich, kleine Abweichung nach unten -->
+    <!-- Zur Lesbarkeit stark übertrieben dargestellt: 15° -->
+    <line x1="0" y1="0" x2="133" y2="35" stroke="#16a34a" stroke-width="2"/>
+    <polygon points="0,0 -4,6 5,4" transform="translate(133,35) rotate(15)" fill="#16a34a"/>
+    <text x="115" y="55" font-size="11" fill="#16a34a">α = 0° (tatsächlich)</text>
+    <text x="115" y="68" font-size="10" fill="#16a34a">nach angle_offset</text>
+
+    <!-- Bogen für angle_offset -->
+    <path d="M 60,0 A 60,60 0 0 1 57.9,15.6" fill="none" stroke="#f59e0b" stroke-width="1.5"/>
+    <text x="68" y="12" font-size="10" fill="#f59e0b">angle_offset</text>
+    <text x="68" y="24" font-size="10" fill="#f59e0b">= −1.05°</text>
+    <text x="68" y="36" font-size="9" fill="#888">(übertrieben dargest.)</text>
+
+    <!-- Beispiel-Messpunkt P -->
+    <line x1="0" y1="0" x2="105" y2="-115" stroke="#555" stroke-width="1.5"/>
+    <circle cx="105" cy="-115" r="5" fill="#555"/>
+    <text x="115" y="-118" font-size="11" fill="#333">P (Messpunkt)</text>
+    <!-- Bogen für Messwinkel -->
+    <path d="M 50,0 A 50,50 0 0 0 35.3,-38.3" fill="none" stroke="#555" stroke-width="1.2" stroke-dasharray="3,2"/>
+    <text x="55" y="-25" font-size="10" fill="#555">α (Messwinkel)</text>
+    <text x="55" y="-38" font-size="9" fill="#888">0°–360°, CCW</text>
+
+    <!-- Beschriftung Scan-Ebene -->
+    <text x="-155" y="-165" font-size="11" font-weight="600" fill="#333">Scan-Ebene X-Z</text>
+    <text x="-155" y="-150" font-size="10" fill="#666">(Blick entlang +Y)</text>
+
+  </g><!-- /scan-plane Gruppe -->
+
+  <!-- ═══════════════════════════════════════════════════════════
+       LEGENDE
+  ════════════════════════════════════════════════════════════════ -->
+  <g transform="translate(30, 450)">
+    <rect width="250" height="135" rx="6" fill="#f0f4f8" stroke="#d0d7de"/>
+    <text x="12" y="20" font-size="12" font-weight="700" fill="#111">Legende</text>
+
+    <circle cx="22" cy="38" r="5" fill="#dc2626"/>
+    <text x="34" y="43" font-size="11" fill="#333">Z — Vertikale (oben ↑)</text>
+
+    <circle cx="22" cy="58" r="5" fill="#2563eb"/>
+    <text x="34" y="63" font-size="11" fill="#333">X — Horizontal, α=0 Richtung</text>
+
+    <circle cx="22" cy="78" r="5" fill="#9333ea"/>
+    <text x="34" y="83" font-size="11" fill="#333">Y — Spinachse (Drehung)</text>
+
+    <circle cx="22" cy="98" r="5" fill="#dc2626" opacity="0.9"/>
+    <circle cx="22" cy="98" r="2" fill="white"/>
+    <text x="34" y="103" font-size="11" fill="#333">S — LiDAR-Optikzentrum</text>
+
+    <line x1="14" y1="118" x2="30" y2="118" stroke="#16a34a" stroke-width="2"/>
+    <text x="34" y="123" font-size="11" fill="#333">z_angle — Plattformdrehung</text>
+  </g>
+
+  <!-- Hinweisbox STL27L -->
+  <g transform="translate(300, 450)">
+    <rect width="300" height="135" rx="6" fill="#fefce8" stroke="#fde68a"/>
+    <text x="12" y="20" font-size="12" font-weight="700" fill="#78350f">STL27L — Sensor-Null</text>
+    <text x="12" y="40" font-size="11" fill="#92400e">Winkel α = 0° zeigt in Richtung +X,</text>
+    <text x="12" y="56" font-size="11" fill="#92400e">wenn z_angle = 0° (Startposition).</text>
+    <text x="12" y="76" font-size="11" fill="#92400e">Winkel wächst gegen den Uhrzeigersinn</text>
+    <text x="12" y="92" font-size="11" fill="#92400e">in der X-Z-Scan-Ebene (CCW).</text>
+    <text x="12" y="112" font-size="11" fill="#b45309">angle_offset korrigiert Montage-</text>
+    <text x="12" y="126" font-size="11" fill="#b45309">kippung (Y-Drehung in Scan-Ebene).</text>
+  </g>
+
+  <!-- Offsets-Erklärung -->
+  <g transform="translate(620, 450)">
+    <rect width="270" height="135" rx="6" fill="#f0fdf4" stroke="#86efac"/>
+    <text x="12" y="20" font-size="12" font-weight="700" fill="#14532d">Offsets (config.json)</text>
+    <text x="12" y="40" font-size="11" fill="#166534">MODEL_Y = −37.5 mm</text>
+    <text x="12" y="55" font-size="10" fill="#4ade80">Sensor-Abstand von Drehachse (−Y)</text>
+    <text x="12" y="75" font-size="11" fill="#166534">MODEL_Z = −41.9 mm</text>
+    <text x="12" y="90" font-size="10" fill="#4ade80">Sensor-Höhe unter Datum-Punkt (−Z)</text>
+    <text x="12" y="110" font-size="11" fill="#166534">angle_offset = −1.05°</text>
+    <text x="12" y="125" font-size="10" fill="#4ade80">Korrigiert Sensor-Kippung um Y-Achse</text>
+  </g>
+
+  <!-- Trennlinie zwischen den Ansichten -->
+  <line x1="460" y1="65" x2="460" y2="430" stroke="#d0d7de" stroke-width="1" stroke-dasharray="6,3"/>
+  <text x="280" y="80" text-anchor="middle" font-size="11" fill="#888">Ansicht A — Isometrisch (alle 3 Achsen)</text>
+  <text x="680" y="80" text-anchor="middle" font-size="11" fill="#888">Ansicht B — Scan-Ebene X-Z (Blick entlang +Y)</text>
+
+</svg>

@@ -31,9 +31,12 @@ def rpm_stability(frames: list[dict]) -> dict:
 def loop_closure_residual(frames, angle_offset, position_offset, dist_min, dist_max,
                           scan_angle, overlap_deg, max_pts=4000) -> float | None:
     """Mittlerer Nächster-Nachbar-Abstand [mm] zwischen Anfangs- und
-    Überlappungs-Sektor. Großer Wert ⇒ Schrittverlust/Schlupf/Fehlkalibrierung."""
+    Überlappungs-Sektor. Großer Wert ⇒ Schrittverlust/Schlupf/Fehlkalibrierung.
+    Nur sinnvoll bei vollständiger Umdrehung (≥ 350°)."""
     if cKDTree is None or not frames:
         return None
+    if scan_angle < 350:
+        return None  # Kein räumlicher Überlapp bei Teilscans
     z = np.array([fr["z_angle"] for fr in frames], dtype=float)
     start_sel = [fr for fr, zz in zip(frames, z) if 0.0 <= zz <= overlap_deg]
     # Überlappung am Ende: derselbe Raumbereich, ~180° weitergedreht

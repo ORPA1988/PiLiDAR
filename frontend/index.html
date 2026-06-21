@@ -54,6 +54,21 @@
         <div>Pakete/s: <b id="stRate">0</b></div>
         <div>CRC-Fehler: <b id="stCrc">0</b>%</div>
         <div>Punkte: <b id="stPts">0</b></div>
+        <div>Opt. Geschw.: <b id="stOptSpeed">–</b> °/s</div>
+        <div class="health-row">LiDAR: <span id="lidarHealth" class="dot dot-off"></span> <b id="lidarHealthTxt">–</b></div>
+      </div>
+
+      <div class="group stats sys-stats">
+        <strong>System</strong>
+        <div>CPU: <b id="stCpu">–</b> %</div>
+        <div>RAM: <b id="stRam">–</b> %</div>
+        <div id="stNet">Netzwerk: –</div>
+      </div>
+
+      <div class="group">
+        <strong>System-Steuerung</strong>
+        <button id="btnReboot" class="secondary">&#8635; Neustart</button>
+        <button id="btnPoweroff" class="danger">&#9210; Ausschalten</button>
       </div>
     </section>
 

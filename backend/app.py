@@ -9,11 +9,20 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
+import time
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+
+try:
+    import psutil as _psutil
+except ImportError:
+    _psutil = None
+
+_net_prev: dict = {}  # {iface: (bytes_sent, bytes_recv, timestamp)}
 
 from .config import config
 from .controller import ScanController
@@ -102,6 +111,59 @@ async def api_cal_rotation():
 async def api_cal_offset():
     result = await asyncio.to_thread(controller.run_offset_calibration)
     return result
+
+
+@app.get("/api/system/stats")
+async def api_system_stats():
+    if _psutil is None:
+        return {"available": False}
+    cpu = _psutil.cpu_percent(interval=None)
+    ram = _psutil.virtual_memory().percent
+    net: dict = {}
+    try:
+        counters = _psutil.net_io_counters(pernic=True)
+        now = time.monotonic()
+        for iface in ("eth0", "wlan0", "bnep0", "end0"):
+            if iface not in counters:
+                continue
+            c = counters[iface]
+            if iface in _net_prev:
+                prev_sent, prev_recv, prev_t = _net_prev[iface]
+                dt = max(1e-3, now - prev_t)
+                net[iface] = {
+                    "tx_bps": int((c.bytes_sent - prev_sent) / dt),
+                    "rx_bps": int((c.bytes_recv - prev_recv) / dt),
+                }
+            else:
+                net[iface] = {"tx_bps": 0, "rx_bps": 0}
+            _net_prev[iface] = (c.bytes_sent, c.bytes_recv, now)
+    except Exception:
+        pass
+    return {"available": True, "cpu_percent": cpu, "ram_percent": ram, "net": net}
+
+
+@app.post("/api/system/reboot")
+async def api_reboot():
+    subprocess.run(["sudo", "systemctl", "reboot"], check=False)
+    return {"ok": True}
+
+
+@app.post("/api/system/poweroff")
+async def api_poweroff():
+    subprocess.run(["sudo", "systemctl", "poweroff"], check=False)
+    return {"ok": True}
+
+
+@app.delete("/api/scans/{scan_id}")
+async def api_scan_delete(scan_id: str):
+    controller.store.delete_scan(scan_id)
+    return {"ok": True}
+
+
+@app.post("/api/scans/{scan_id}/annotation")
+async def api_scan_annotation(scan_id: str, payload: dict = Body(...)):
+    controller.store.update_annotation(scan_id, str(payload.get("text", "")))
+    return {"ok": True}
 
 
 @app.post("/api/config/apply")

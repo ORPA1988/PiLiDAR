@@ -4,6 +4,7 @@ uvicorn[standard]>=0.29
 pyserial>=3.5
 numpy>=1.24
 scipy>=1.10
+psutil>=5.9
 # Hardware (nur auf dem Raspberry Pi nötig):
 rpi-lgpio>=0.6 ; platform_machine == "aarch64"
 rpi-hardware-pwm>=0.2.2 ; platform_machine == "aarch64"
