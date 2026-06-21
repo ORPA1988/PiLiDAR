@@ -121,7 +121,12 @@ class LidarReader:
         self._ser = None
         self._thread: Optional[threading.Thread] = None
         self._running = threading.Event()
-        self._motor_on = False        # verfolgt den Spiegelmotor-Zustand (idempotent)
+        # Der STL27L-Spiegel dreht ab Werk, sobald er mit Strom versorgt wird
+        # (laut Waveshare-Doku stoppt erst ein "0"). Daher gilt er initial als
+        # "läuft": beim normalen Start wird KEIN "1" gesendet, der Spiegel läuft
+        # einfach durch. Ein "0" geht nur beim expliziten Stopp raus, ein "1" nur,
+        # um nach einem solchen Stopp wieder anzufahren.
+        self._motor_on = True
         self.stats = LidarStats()
 
     # ------------------------------------------------------------------
@@ -168,7 +173,8 @@ class LidarReader:
             return  # bereits aktiv – kein zweiter Reader-Thread, kein erneuter Motorbefehl
         if self._ser is None:
             self.open()
-        self._set_motor(True)  # Spiegelmotor starten
+        # No-op falls der Spiegel ohnehin läuft; sendet "1" nur nach einem Stopp.
+        self._set_motor(True)
         self.stats = LidarStats()
         self._running.set()
         self._thread = threading.Thread(target=self._loop, name="LidarReader", daemon=True)
