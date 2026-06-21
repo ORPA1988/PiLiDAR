@@ -11,6 +11,7 @@ const worker = new Worker('js/scan.worker.js');
 let ws = null;
 let viewMode = '2d';
 let totalPoints = 0;
+let lidarResDeg = 0;   // vertikale Winkelauflösung [°], live aus Frames gemessen
 
 v2d.start();
 
@@ -35,6 +36,11 @@ function connectWS() {
     if (m.type === 'init') {
       worker.postMessage({ type: 'init', ...m });
     } else if (m.type === 'frame') {
+      // Winkelauflösung aus benachbarten Punkten eines Pakets messen (Wrap ausschließen)
+      if (m.a && m.a.length >= 2) {
+        const step = Math.abs(m.a[1] - m.a[0]);
+        if (step > 0 && step < 5) lidarResDeg = step;
+      }
       if (viewMode === '2d') v2d.addFrame(m.a, m.d);
       worker.postMessage({ type: 'frame', a: m.a, d: m.d, i: m.i, z: m.z });
     }
@@ -122,8 +128,12 @@ async function poll() {
     $('stAngle').textContent = s.angle;
     $('stRate').textContent = s.lidar_running ? Math.round(s.stats.packet_rate) : 0;
     $('stCrc').textContent = (s.stats.crc_error_rate * 100).toFixed(2);
-    if (s.stats.last_speed_dps > 0)
-      $('stOptSpeed').textContent = (s.stats.last_speed_dps / 11).toFixed(1);
+    // Optimale Plattform-Geschwindigkeit für gleichen H/V-Punktabstand:
+    //   SPEED_DPS = Auflösung[°] × Umdrehungsfrequenz[Hz] = res × (spiegel_dps / 360)
+    if (s.stats.last_speed_dps > 0 && lidarResDeg > 0) {
+      const freqHz = s.stats.last_speed_dps / 360;
+      $('stOptSpeed').textContent = (lidarResDeg * freqHz).toFixed(2);
+    }
     updateLidarHealth(s);
   } catch (e) { /* offline */ }
   try {
