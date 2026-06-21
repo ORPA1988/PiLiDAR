@@ -69,6 +69,13 @@ class MockLidarSerial:
         del self._buf[:n]
         return out
 
+    def write(self, data: bytes) -> int:
+        # Motor-Steuerbefehle (b"0"/b"1") werden im Mock ignoriert.
+        return len(data)
+
+    def flush(self) -> None:
+        pass
+
     def close(self):
         pass
 

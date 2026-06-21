@@ -13,6 +13,14 @@ const FRAG = `
 precision mediump float; varying float vInt;
 void main(){ float g = clamp(vInt/255.0,0.05,1.0); gl_FragColor = vec4(g*0.5, g, g*0.7, 1.0); }`;
 
+// Eigenes Programm für Achsenlinien (einfarbig, ohne Intensität)
+const AXIS_VERT = `
+attribute vec3 aPos; uniform mat4 uMVP;
+void main(){ gl_Position = uMVP * vec4(aPos,1.0); }`;
+const AXIS_FRAG = `
+precision mediump float; uniform vec3 uColor;
+void main(){ gl_FragColor = vec4(uColor,1.0); }`;
+
 function mat4Mul(a, b) {
   const o = new Float32Array(16);
   for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
@@ -51,10 +59,92 @@ class Viewer3D {
     this.theta = 0.6; this.phi = 1.0; this.dist = 8.0;
     this.target = [0, 0, 0];
     this._drag = false; this._lx = 0; this._ly = 0;
+    this.axisLen = 1.0;        // Achsenlänge / Maßstab [m]
+    this._initAxes();
+    this._initLabels();
     this._bindControls();
     this._resize();
     window.addEventListener('resize', () => this._resize());
     this._loop();
+  }
+
+  // --- Koordinatenachsen (X rot, Y grün, Z blau) ----------------------
+  _initAxes() {
+    const gl = this.gl;
+    this._axisProg = this._program(AXIS_VERT, AXIS_FRAG);
+    this._axisAPos = gl.getAttribLocation(this._axisProg, 'aPos');
+    this._axisUMVP = gl.getUniformLocation(this._axisProg, 'uMVP');
+    this._axisUColor = gl.getUniformLocation(this._axisProg, 'uColor');
+    const L = this.axisLen;
+    this._axes = [
+      { color: [0.95, 0.30, 0.27], tip: [L, 0, 0], name: 'X' },
+      { color: [0.25, 0.73, 0.31], tip: [0, L, 0], name: 'Y' },
+      { color: [0.30, 0.55, 0.95], tip: [0, 0, L], name: 'Z' },
+    ];
+    for (const ax of this._axes) {
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER,
+        new Float32Array([0, 0, 0, ax.tip[0], ax.tip[1], ax.tip[2]]), gl.STATIC_DRAW);
+      ax.buf = buf;
+    }
+  }
+
+  // HTML-Overlay-Labels über dem Canvas (WebGL kann keinen Text)
+  _initLabels() {
+    const host = this.canvas.parentNode;
+    let ov = host.querySelector('.v3d-labels');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.className = 'v3d-labels';
+      host.appendChild(ov);
+    }
+    this._overlay = ov;
+    this._labelEls = {};
+    for (const ax of this._axes) {
+      const el = document.createElement('span');
+      el.className = 'v3d-axis-label';
+      el.textContent = ax.name;
+      el.style.color = `rgb(${ax.color.map(c => Math.round(c * 255)).join(',')})`;
+      ov.appendChild(el);
+      this._labelEls[ax.name] = el;
+    }
+    // statischer Maßstab unten links
+    this._scaleEl = document.createElement('span');
+    this._scaleEl.className = 'v3d-scale';
+    this._scaleEl.textContent = `Achsen = ${this.axisLen.toFixed(0)} m`;
+    ov.appendChild(this._scaleEl);
+  }
+
+  _projectToScreen(p, mvp) {
+    // clip = mvp · [x,y,z,1]  (mvp ist spaltenweise gespeichert)
+    const x = p[0], y = p[1], z = p[2];
+    const cx = mvp[0] * x + mvp[4] * y + mvp[8] * z + mvp[12];
+    const cy = mvp[1] * x + mvp[5] * y + mvp[9] * z + mvp[13];
+    const cw = mvp[3] * x + mvp[7] * y + mvp[11] * z + mvp[15];
+    if (cw <= 1e-6) return null;                  // hinter der Kamera
+    const W = this.canvas.width / devicePixelRatio;
+    const H = this.canvas.height / devicePixelRatio;
+    return { px: (cx / cw + 1) / 2 * W, py: (1 - cy / cw) / 2 * H };
+  }
+
+  _drawAxes(mvp) {
+    const gl = this.gl;
+    gl.useProgram(this._axisProg);
+    gl.uniformMatrix4fv(this._axisUMVP, false, mvp);
+    gl.lineWidth(2.0);
+    for (const ax of this._axes) {
+      gl.uniform3fv(this._axisUColor, ax.color);
+      gl.bindBuffer(gl.ARRAY_BUFFER, ax.buf);
+      gl.enableVertexAttribArray(this._axisAPos);
+      gl.vertexAttribPointer(this._axisAPos, 3, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.LINES, 0, 2);
+      // Label an die projizierte Achsenspitze setzen
+      const s = this._projectToScreen(ax.tip, mvp);
+      const el = this._labelEls[ax.name];
+      if (s) { el.style.display = 'block'; el.style.left = `${s.px}px`; el.style.top = `${s.py}px`; }
+      else { el.style.display = 'none'; }
+    }
   }
 
   _program(vs, fs) {
@@ -137,6 +227,7 @@ class Viewer3D {
       gl.vertexAttribPointer(this.aInt, 1, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.POINTS, 0, c.count);
     }
+    this._drawAxes(mvp);
     requestAnimationFrame(() => this._loop());
   }
 }

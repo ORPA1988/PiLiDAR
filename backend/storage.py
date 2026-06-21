@@ -117,6 +117,50 @@ class ScanStore:
             fh.write(arr.tobytes())
 
     # ------------------------------------------------------------------
+    def load_pointcloud(self, scan_id: str) -> dict:
+        """Punktwolke eines gespeicherten Scans laden (für die 3D-Anzeige).
+
+        Liest bevorzugt die kompakte PLY-Datei (mit Intensität), fällt sonst auf
+        die XYZ-Textdatei zurück. Gibt geflachte Float-Listen zurück, kompatibel
+        mit Viewer3D.addPoints():  {"xyz": [...], "inten": [...], "total": n}.
+        """
+        d = self.scan_dir(scan_id) / "pointcloud"
+        ply = d / f"{scan_id}.ply"
+        if ply.exists():
+            return self._read_ply(ply)
+        xyz = d / f"{scan_id}.xyz"
+        if xyz.exists():
+            pts = np.loadtxt(xyz, dtype=np.float32)
+            pts = np.atleast_2d(pts)
+            n = len(pts)
+            return {"xyz": pts.reshape(-1).tolist(),
+                    "inten": [180.0] * n, "total": n}
+        return {"xyz": [], "inten": [], "total": 0}
+
+    @staticmethod
+    def _read_ply(path: Path) -> dict:
+        """Binäres PLY (siehe _write_ply) zurück in flache Listen lesen."""
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        end = raw.find(b"end_header\n")
+        if end < 0:
+            return {"xyz": [], "inten": [], "total": 0}
+        header = raw[:end].decode("ascii", "ignore")
+        n = 0
+        for line in header.splitlines():
+            if line.startswith("element vertex"):
+                n = int(line.split()[-1])
+        body = raw[end + len(b"end_header\n"):]
+        dtype = np.dtype([("x", "<f4"), ("y", "<f4"), ("z", "<f4"),
+                          ("r", "u1"), ("g", "u1"), ("b", "u1")])
+        arr = np.frombuffer(body, dtype=dtype, count=n)
+        xyz = np.empty((n, 3), dtype=np.float32)
+        xyz[:, 0] = arr["x"]; xyz[:, 1] = arr["y"]; xyz[:, 2] = arr["z"]
+        return {"xyz": xyz.reshape(-1).tolist(),
+                "inten": arr["r"].astype(np.float32).tolist(),
+                "total": n}
+
+    # ------------------------------------------------------------------
     def delete_scan(self, scan_id: str) -> None:
         import shutil
         d = self.scan_dir(scan_id)
