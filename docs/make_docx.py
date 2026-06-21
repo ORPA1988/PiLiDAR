@@ -133,8 +133,13 @@ def build():
         "Motorphasen 18–20 AWG verdrillt, Signalleitungen 24–28 AWG; Schirm einseitig auf GND; Ferrit auf USB/Signal.",
         "LiDAR über USB — keine GPIO-UART-Pegelwandlung nötig (3,3-V-Logik bleibt geschützt).",
     ])
-    img(doc, os.path.join(IMG, "verkabelung_a4988.png"), caption="Verkabelungsplan A4988 (Ist-Zustand)")
-    img(doc, os.path.join(IMG, "verkabelung_tmc2209.png"), caption="Verkabelungsplan TMC2209 (Upgrade)")
+    para(doc, "Übersichtspläne:")
+    img(doc, os.path.join(IMG, "verkabelung_a4988.png"), caption="Übersicht A4988 (Ist-Zustand)")
+    img(doc, os.path.join(IMG, "verkabelung_tmc2209.png"), caption="Übersicht TMC2209 (Upgrade)")
+    para(doc, "Detailgetreue, pin-genaue Pläne (komplette 40-Pin-Leiste, voller Treiber-Pinout, "
+              "Kondensatoren an den korrekten Knoten, Spulenpaare, Sternmasse):")
+    img(doc, os.path.join(IMG, "verkabelung_a4988_detail.png"), caption="Detailplan A4988 — pin-genau")
+    img(doc, os.path.join(IMG, "verkabelung_tmc2209_detail.png"), caption="Detailplan TMC2209 — pin-genau (inkl. UART-Option)")
     img(doc, os.path.join(IMG, "gpio_pinout.png"), width=5.5, caption="Belegte GPIO-Pins (BCM)")
     para(doc, "Detaillierte Stückliste, Specs, GPIO-Belegung, Kondensatoren/Kabel und der "
               "Treibervergleich befinden sich in der Datei PiLiDAR_BOM_Specs.xlsx.")
