@@ -22,11 +22,11 @@ class Viewer2D {
   clear() { this.points = []; }
 
   addFrame(angles, dists) {
-    // ältere Punkte verblassen lassen -> Ringpuffer
+    // Nur den aktuellen Frame zeigen (kein Akkumulieren)
+    this.points = [];
     for (let i = 0; i < dists.length; i++) {
       if (dists[i] > 0) this.points.push({ a: angles[i], d: dists[i] });
     }
-    if (this.points.length > 6000) this.points.splice(0, this.points.length - 6000);
   }
 
   start() { if (!this._raf) this._loop(); }
