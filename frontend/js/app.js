@@ -90,6 +90,7 @@ function applyViewMode() {
   }
 }
 document.querySelectorAll('input[name=view]').forEach(r => r.onchange = applyViewMode);
+applyViewMode();  // Anfangszustand setzen (3D-Achsen-Overlay korrekt aus-/einblenden)
 
 function clearView() {
   v2d.clear(); v3d.clear(); worker.postMessage({ type: 'clear' });
@@ -219,9 +220,18 @@ async function loadScanInto3D(scanId) {
   try {
     const r = await api(`/api/scans/${scanId}/pointcloud`);
     if (!r.ok) { alert('Punktwolke nicht gefunden.'); return; }
-    const data = await r.json();
-    v3d.addPoints(new Float32Array(data.xyz), new Float32Array(data.inten));
-    totalPoints = data.total;
+    // Kompakter Binär-Buffer: uint32 n | float32[n*3] xyz | uint8[n] Intensität
+    const buf = await r.arrayBuffer();
+    const n = new Uint32Array(buf, 0, 1)[0];
+    const xyz = new Float32Array(buf, 4, n * 3);
+    const inten = Float32Array.from(new Uint8Array(buf, 4 + n * 12, n));
+    // in Blöcken einspeisen, damit sehr große Wolken den GPU-Upload nicht blockieren
+    const CHUNK = 200000;  // Punkte pro Block
+    for (let i = 0; i < n; i += CHUNK) {
+      const m = Math.min(CHUNK, n - i);
+      v3d.addPoints(xyz.slice(i * 3, (i + m) * 3), inten.slice(i, i + m));
+    }
+    totalPoints = n;
     $('stPts').textContent = totalPoints.toLocaleString('de-DE');
   } catch (e) {
     alert('Fehler beim Laden der Punktwolke.');
