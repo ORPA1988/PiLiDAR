@@ -28,9 +28,10 @@ function transformFrame(angles, dists, inten, zAngle) {
     if (d < cfg.dist_min || d > cfg.dist_max) continue;
     const a = deg2rad(angles[i]);
     // Punkt in Scan-Ebene (X-Z, y=0)
+    // Winkel 0°→+X, 270°→+Z(oben): pz = -sin(a) (sin(270°)=-1 → pz=+d=oben)
     let px = d * Math.cos(a);
     let py = 0.0;
-    let pz = d * Math.sin(a);
+    let pz = -d * Math.sin(a);
     // Y-Rotation (angle_offset): x' = x*c + z*s ; z' = -x*s + z*c
     let rx = px * caO + pz * saO;
     let rz = -px * saO + pz * caO;

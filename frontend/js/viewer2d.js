@@ -22,11 +22,11 @@ class Viewer2D {
   clear() { this.points = []; }
 
   addFrame(angles, dists) {
-    // ältere Punkte verblassen lassen -> Ringpuffer
+    // Nur den aktuellen Frame zeigen (kein Akkumulieren)
+    this.points = [];
     for (let i = 0; i < dists.length; i++) {
       if (dists[i] > 0) this.points.push({ a: angles[i], d: dists[i] });
     }
-    if (this.points.length > 6000) this.points.splice(0, this.points.length - 6000);
   }
 
   start() { if (!this._raf) this._loop(); }
@@ -63,13 +63,13 @@ class Viewer2D {
     ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
 
     // Punkte
-    // Spiegel-Null (LiDAR-Winkel 0) zeigt in +Y-Richtung → im 2D-Plot nach oben.
-    // Im Uhrzeigersinn, damit oben/unten und links/rechts der Realität entsprechen.
+    // Rechte-Hand-Regel (Blick entlang +Y): X=links, Z=oben.
+    // Winkel 0 → +X (links im Plot), Winkel 270 → +Z (oben).
     ctx.fillStyle = '#3fb950';
     for (const p of this.points) {
       const a = p.a * Math.PI / 180;
-      const x = cx + Math.sin(a) * p.d * scale;
-      const y = cy - Math.cos(a) * p.d * scale;
+      const x = cx - Math.cos(a) * p.d * scale;
+      const y = cy + Math.sin(a) * p.d * scale;
       ctx.fillRect(x, y, 2 * devicePixelRatio, 2 * devicePixelRatio);
     }
     // Sensor

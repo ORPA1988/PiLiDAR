@@ -19,7 +19,7 @@ def polar_to_plane(angles_deg: np.ndarray, distances_mm: np.ndarray) -> np.ndarr
     """Polarwerte -> Punkte (x, y, z) in der vertikalen Scan-Ebene (y=0)."""
     a = np.radians(angles_deg)
     x = distances_mm * np.cos(a)
-    z = distances_mm * np.sin(a)
+    z = -distances_mm * np.sin(a)  # 270°→+Z(oben)
     y = np.zeros_like(x)
     return np.column_stack((x, y, z))
 

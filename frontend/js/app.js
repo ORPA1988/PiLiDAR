@@ -14,6 +14,7 @@ let totalPoints = 0;
 let lidarResDeg = 0;   // vertikale Winkelauflösung [°], live aus Frames gemessen
 
 v2d.start();
+applyViewMode();  // 3D-Labels-Overlay beim Start korrekt ausblenden
 
 // --- Worker-Rückgaben -------------------------------------------------
 worker.onmessage = (ev) => {
@@ -41,7 +42,7 @@ function connectWS() {
         const step = Math.abs(m.a[1] - m.a[0]);
         if (step > 0 && step < 5) lidarResDeg = step;
       }
-      if (viewMode === '2d') v2d.addFrame(m.a, m.d);
+      v2d.addFrame(m.a, m.d);  // immer aktualisieren (nur letzter Frame sichtbar)
       worker.postMessage({ type: 'frame', a: m.a, d: m.d, i: m.i, z: m.z });
     }
   };
