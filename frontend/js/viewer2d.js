@@ -22,11 +22,11 @@ class Viewer2D {
   clear() { this.points = []; }
 
   addFrame(angles, dists) {
-    // Nur den aktuellen Frame zeigen (kein Akkumulieren)
-    this.points = [];
     for (let i = 0; i < dists.length; i++) {
       if (dists[i] > 0) this.points.push({ a: angles[i], d: dists[i] });
     }
+    // STL27L: 0,167° Auflösung → ~2160 Pkt/Umdrehung; 2 Umdrehungen puffern
+    if (this.points.length > 4320) this.points.splice(0, this.points.length - 4320);
   }
 
   start() { if (!this._raf) this._loop(); }

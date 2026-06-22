@@ -117,34 +117,47 @@ class ScanStore:
             fh.write(arr.tobytes())
 
     # ------------------------------------------------------------------
-    def load_pointcloud(self, scan_id: str) -> dict:
-        """Punktwolke eines gespeicherten Scans laden (für die 3D-Anzeige).
+    def load_pointcloud_arrays(self, scan_id: str):
+        """Punktwolke als numpy-Arrays laden: (xyz Nx3 float32, inten N uint8).
 
         Liest bevorzugt die kompakte PLY-Datei (mit Intensität), fällt sonst auf
-        die XYZ-Textdatei zurück. Gibt geflachte Float-Listen zurück, kompatibel
-        mit Viewer3D.addPoints():  {"xyz": [...], "inten": [...], "total": n}.
+        die XYZ-Textdatei zurück. Gibt None zurück, wenn nichts vorhanden ist.
         """
         d = self.scan_dir(scan_id) / "pointcloud"
         ply = d / f"{scan_id}.ply"
         if ply.exists():
-            return self._read_ply(ply)
+            return self._read_ply_arrays(ply)
         xyz = d / f"{scan_id}.xyz"
         if xyz.exists():
-            pts = np.loadtxt(xyz, dtype=np.float32)
-            pts = np.atleast_2d(pts)
-            n = len(pts)
-            return {"xyz": pts.reshape(-1).tolist(),
-                    "inten": [180.0] * n, "total": n}
-        return {"xyz": [], "inten": [], "total": 0}
+            pts = np.atleast_2d(np.loadtxt(xyz, dtype=np.float32))
+            inten = np.full(len(pts), 180, dtype=np.uint8)
+            return pts[:, :3].astype(np.float32), inten
+        return None
+
+    def load_pointcloud_packed(self, scan_id: str) -> bytes:
+        """Kompakte Binärdarstellung für die 3D-Anzeige (klein & schnell zu parsen).
+
+        Layout (little-endian):  uint32 n | float32[n*3] xyz [m] | uint8[n] intensität.
+        Ersetzt die früher riesige JSON-Liste (bei Millionen Punkten unbrauchbar).
+        Leerer Buffer (n=0), falls keine Punktwolke existiert.
+        """
+        data = self.load_pointcloud_arrays(scan_id)
+        if data is None:
+            return np.zeros(1, dtype="<u4").tobytes()
+        xyz, inten = data
+        n = len(xyz)
+        return (np.asarray([n], dtype="<u4").tobytes()
+                + np.ascontiguousarray(xyz, dtype="<f4").tobytes()
+                + np.ascontiguousarray(inten, dtype=np.uint8).tobytes())
 
     @staticmethod
-    def _read_ply(path: Path) -> dict:
-        """Binäres PLY (siehe _write_ply) zurück in flache Listen lesen."""
+    def _read_ply_arrays(path: Path):
+        """Binäres PLY (siehe _write_ply) in numpy-Arrays lesen."""
         with open(path, "rb") as fh:
             raw = fh.read()
         end = raw.find(b"end_header\n")
         if end < 0:
-            return {"xyz": [], "inten": [], "total": 0}
+            return np.zeros((0, 3), np.float32), np.zeros(0, np.uint8)
         header = raw[:end].decode("ascii", "ignore")
         n = 0
         for line in header.splitlines():
@@ -156,9 +169,7 @@ class ScanStore:
         arr = np.frombuffer(body, dtype=dtype, count=n)
         xyz = np.empty((n, 3), dtype=np.float32)
         xyz[:, 0] = arr["x"]; xyz[:, 1] = arr["y"]; xyz[:, 2] = arr["z"]
-        return {"xyz": xyz.reshape(-1).tolist(),
-                "inten": arr["r"].astype(np.float32).tolist(),
-                "total": n}
+        return xyz, arr["r"].copy()
 
     # ------------------------------------------------------------------
     def delete_scan(self, scan_id: str) -> None:

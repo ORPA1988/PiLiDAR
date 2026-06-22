@@ -96,11 +96,15 @@ async def api_scans():
 
 @app.get("/api/scans/{scan_id}/pointcloud")
 async def api_scan_pointcloud(scan_id: str):
-    """Gespeicherte Punktwolke für die 3D-Anzeige (flache xyz/inten-Listen)."""
-    data = await asyncio.to_thread(controller.store.load_pointcloud, scan_id)
-    if not data.get("total"):
+    """Gespeicherte Punktwolke für die 3D-Anzeige als kompakter Binär-Buffer.
+
+    Layout (little-endian): uint32 n | float32[n*3] xyz [m] | uint8[n] Intensität.
+    Bei Millionen Punkten ist das um Größenordnungen kleiner/schneller als JSON.
+    """
+    buf = await asyncio.to_thread(controller.store.load_pointcloud_packed, scan_id)
+    if len(buf) <= 4:  # nur der n=0-Header => keine Punktwolke
         return JSONResponse(status_code=404, content={"error": "keine Punktwolke"})
-    return data
+    return Response(content=buf, media_type="application/octet-stream")
 
 
 @app.get("/api/scans/{scan_id}/download")

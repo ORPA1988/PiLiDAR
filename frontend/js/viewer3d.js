@@ -56,7 +56,11 @@ class Viewer3D {
 
     this.chunks = [];          // {posBuf, intBuf, count}
     this.pending = { xyz: [], inten: [] };
-    this.theta = 0.6; this.phi = 1.0; this.dist = 8.0;
+    // Kamera auf der +Y-Seite, Blick zur -Y-Richtung, Z = oben.
+    // So zeigt im Bild +X nach LINKS und +Z nach OBEN (Rechte-Hand-Regel:
+    // Beobachter blickt entlang der Y-Achse, X+ links, Z+ oben).
+    // theta = π/2 hält die Kamera exakt auf der Y-Achse; phi < π/2 kippt leicht von oben.
+    this.theta = Math.PI / 2; this.phi = 1.15; this.dist = 8.0;
     this.target = [0, 0, 0];
     this._drag = false; this._lx = 0; this._ly = 0;
     this.axisLen = 1.0;        // Achsenlänge / Maßstab [m]
