@@ -45,6 +45,15 @@
         <strong>Anzeige</strong>
         <label><input type="radio" name="view" value="2d" checked /> 2D-Polar</label>
         <label><input type="radio" name="view" value="3d" /> 3D-Punktwolke</label>
+        <label>2D-Nachleuchten
+          <select id="persist2d">
+            <option value="200">0,2 s</option>
+            <option value="500">0,5 s</option>
+            <option value="1000" selected>1 s</option>
+            <option value="2000">2 s</option>
+            <option value="5000">5 s</option>
+          </select>
+        </label>
         <button id="btnClear" class="secondary">Ansicht leeren</button>
         <button id="btnPly" class="secondary">PLY exportieren</button>
       </div>

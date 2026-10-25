@@ -1,13 +1,23 @@
 /* 2D-Polarplot der aktuellen Scan-Ebene (Canvas). Leichtgewichtig, für den
- * Lidar-Only-Modus zum Ausrichten/Prüfen. Zeigt die jeweils letzten Frames. */
+ * Lidar-Only-Modus zum Ausrichten/Prüfen.
+ *
+ * Je 0,2°-Winkelsegment wird der letzte Messwert mit Zeitstempel gehalten und
+ * bis zur Nachleuchtzeit (persistMs) angezeigt, zum Ende hin ausgeblendet. So
+ * bleibt die volle Kontur sichtbar, auch wenn nicht jedes Paket ankommt. */
 'use strict';
+
+const BIN_DEG = 0.2;
+const N_BINS = Math.round(360 / BIN_DEG);
 
 class Viewer2D {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.maxRange = 6000; // mm, Anzeigeradius (Auto-Skalierung)
-    this.points = [];     // {a, d}
+    this.maxRange = 6000;            // mm, Anzeigeradius (Auto-Skalierung)
+    this.persistMs = 1000;           // Nachleuchtzeit
+    this.dist = new Float32Array(N_BINS);
+    this.stamp = new Float64Array(N_BINS);   // performance.now() der letzten Messung
+    this.angle = new Float32Array(N_BINS);
     this._raf = null;
     this._resize();
     window.addEventListener('resize', () => this._resize());
@@ -19,14 +29,19 @@ class Viewer2D {
     this.canvas.height = r.height * devicePixelRatio;
   }
 
-  clear() { this.points = []; }
+  setPersistence(ms) { this.persistMs = Math.max(50, +ms || 1000); }
+
+  clear() { this.stamp.fill(0); this.dist.fill(0); }
 
   addFrame(angles, dists) {
+    const now = performance.now();
     for (let i = 0; i < dists.length; i++) {
-      if (dists[i] > 0) this.points.push({ a: angles[i], d: dists[i] });
+      const d = dists[i];
+      if (!(d > 0)) continue;
+      let a = angles[i] % 360; if (a < 0) a += 360;
+      const b = Math.min(N_BINS - 1, Math.floor(a / BIN_DEG));
+      this.dist[b] = d; this.angle[b] = a; this.stamp[b] = now;
     }
-    // STL27L: 0,167° Auflösung → ~2160 Pkt/Umdrehung; 2 Umdrehungen puffern
-    if (this.points.length > 4320) this.points.splice(0, this.points.length - 4320);
   }
 
   start() { if (!this._raf) this._loop(); }
@@ -42,11 +57,22 @@ class Viewer2D {
     ctx.clearRect(0, 0, W, H);
     const cx = W / 2, cy = H / 2;
     const R = Math.min(W, H) * 0.45;
+    const now = performance.now(), persist = this.persistMs;
 
-    // Auto-Range
-    let mx = 1000;
-    for (const p of this.points) if (p.d > mx) mx = p.d;
-    this.maxRange = this.maxRange * 0.9 + mx * 0.1;
+    // sichtbare Segmente sammeln
+    const vis = [];
+    for (let b = 0; b < N_BINS; b++) {
+      const age = now - this.stamp[b];
+      if (this.stamp[b] > 0 && age < persist) vis.push(b);
+    }
+
+    // Auto-Range über das 98. Perzentil (einzelne Ausreißer ignorieren)
+    let target = 1000;
+    if (vis.length) {
+      const ds = vis.map(b => this.dist[b]).sort((x, y) => x - y);
+      target = Math.max(1000, ds[Math.floor(0.98 * (ds.length - 1))] * 1.1);
+    }
+    this.maxRange = this.maxRange * 0.9 + target * 0.1;
     const scale = R / this.maxRange;
 
     // Gitter
@@ -62,16 +88,22 @@ class Viewer2D {
     ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy);
     ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
 
-    // Punkte
+    // Punkte, in 4 Altersstufen ausgeblendet
     // Rechte-Hand-Regel (Blick entlang +Y): X=links, Z=oben.
     // Winkel 0 → +X (links im Plot), Winkel 270 → +Z (oben).
     ctx.fillStyle = '#3fb950';
-    for (const p of this.points) {
-      const a = p.a * Math.PI / 180;
-      const x = cx - Math.cos(a) * p.d * scale;
-      const y = cy + Math.sin(a) * p.d * scale;
-      ctx.fillRect(x, y, 2 * devicePixelRatio, 2 * devicePixelRatio);
+    const sz = 2 * devicePixelRatio;
+    for (let level = 3; level >= 0; level--) {
+      ctx.globalAlpha = 1 - level * 0.22;
+      const lo = persist * level / 4, hi = persist * (level + 1) / 4;
+      for (const b of vis) {
+        const age = now - this.stamp[b];
+        if (age < lo || age >= hi) continue;
+        const a = this.angle[b] * Math.PI / 180, d = this.dist[b];
+        ctx.fillRect(cx - Math.cos(a) * d * scale, cy + Math.sin(a) * d * scale, sz, sz);
+      }
     }
+    ctx.globalAlpha = 1;
     // Sensor
     ctx.fillStyle = '#f85149';
     ctx.beginPath(); ctx.arc(cx, cy, 4 * devicePixelRatio, 0, 2 * Math.PI); ctx.fill();

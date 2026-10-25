@@ -26,6 +26,23 @@ STATE_CALIBRATING = "calibrating"
 STATE_PROCESSING = "processing"
 
 
+def _offer(q: asyncio.Queue, msg: dict) -> None:
+    """In die Client-Queue legen; ist sie voll (Client zu langsam), das älteste
+    Element verwerfen. Läuft im Event-Loop – darf keine Ausnahme werfen, sonst
+    protokolliert asyncio bei jedem Paket die komplette Queue."""
+    try:
+        q.put_nowait(msg)
+    except asyncio.QueueFull:
+        try:
+            q.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+        try:
+            q.put_nowait(msg)
+        except asyncio.QueueFull:
+            pass
+
+
 def _frame_to_msg(fr: Frame) -> dict:
     return {
         "t": round(fr.recv_time, 4),
@@ -122,7 +139,7 @@ class ScanController:
         if self._loop is not None:
             for q in list(self._subscribers):
                 try:
-                    self._loop.call_soon_threadsafe(q.put_nowait, msg)
+                    self._loop.call_soon_threadsafe(_offer, q, msg)
                 except Exception:
                     pass
 

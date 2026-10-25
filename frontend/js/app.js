@@ -14,6 +14,17 @@ let totalPoints = 0;
 let lidarResDeg = 0;   // vertikale Winkelauflösung [°], live aus Frames gemessen
 
 v2d.start();
+// Nachleuchtzeit der 2D-Ansicht (je Browser gemerkt)
+(() => {
+  const sel = $('persist2d');
+  if (!sel) return;
+  try { const v = localStorage.getItem('pilidar.persist2d'); if (v) sel.value = v; } catch (e) {}
+  v2d.setPersistence(sel.value);
+  sel.onchange = () => {
+    v2d.setPersistence(sel.value);
+    try { localStorage.setItem('pilidar.persist2d', sel.value); } catch (e) {}
+  };
+})();
 applyViewMode();  // 3D-Labels-Overlay beim Start korrekt ausblenden
 
 // --- Worker-Rückgaben -------------------------------------------------
@@ -42,7 +53,7 @@ function connectWS() {
         const step = Math.abs(m.a[1] - m.a[0]);
         if (step > 0 && step < 5) lidarResDeg = step;
       }
-      v2d.addFrame(m.a, m.d);  // immer aktualisieren (nur letzter Frame sichtbar)
+      v2d.addFrame(m.a, m.d);  // immer aktualisieren (Nachleuchten je Winkelsegment)
       worker.postMessage({ type: 'frame', a: m.a, d: m.d, i: m.i, z: m.z });
     }
   };
