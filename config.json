@@ -1,7 +1,7 @@
 {
   "LIDAR": {
     "MODEL": "STL27L",
-    "PORT": "/dev/ttyUSB0",
+    "PORT": "/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_ba99d9a1b26eef11b05bbd7dc169b110-if00-port0",
     "BAUDRATE": 921600,
     "ANGLE_OFFSET": -1.05,
     "DISTANCE_MIN_MM": 30,
@@ -9,6 +9,13 @@
   },
 
   "STEPPER": {
+    "BACKEND": "esp32",
+    "PORT": "auto",
+    "BAUDRATE": 115200,
+    "MOVE_SPEED_DPS": 20.0,
+    "MOVE_ACCEL_DPS2": 40.0,
+    "DIR_INVERT": false,
+    "REPORT_MS": 20,
     "DIR_PIN": 26,
     "STEP_PIN": 19,
     "MS_PINS": [5, 6, 13],

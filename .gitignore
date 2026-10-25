@@ -19,3 +19,7 @@ Thumbs.db
 
 # Claude Code lokal
 .claude/settings.local.json
+
+# Firmware-Build (lokal erzeugt bzw. übergeben)
+firmware/**/build/
+hardware/variante_b/out/

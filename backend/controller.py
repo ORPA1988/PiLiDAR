@@ -14,6 +14,7 @@ from .calibration import calibrate_offset, calibrate_rotation
 from .config import Config
 from .hardware.lidar import Frame, LidarReader
 from .hardware.stepper import Stepper
+from .hardware.stepper_esp32 import Esp32Stepper
 from .pointcloud import build_pointcloud
 from .qa import compute_qa
 from .storage import ScanStore
@@ -39,13 +40,7 @@ def _frame_to_msg(fr: Frame) -> dict:
 class ScanController:
     def __init__(self, config: Config, force_mock: bool = False):
         self.cfg = config
-        s = config.STEPPER
-        self.stepper = Stepper(
-            dir_pin=s["DIR_PIN"], step_pin=s["STEP_PIN"], ms_pins=s["MS_PINS"],
-            step_angle=s["STEP_ANGLE"], microsteps=s["MICROSTEPS"],
-            gear_ratio=s["GEAR_RATIO"], step_delay=s["STEP_DELAY"],
-            pwm_channel=config.MODE_B_CONTINUOUS["PWM_CHANNEL"], force_mock=force_mock,
-        )
+        self.stepper = self._make_stepper(config, force_mock)
         l = config.LIDAR
         self.lidar = LidarReader(
             port=l["PORT"], baudrate=l["BAUDRATE"], angle_offset=l["ANGLE_OFFSET"],
@@ -66,6 +61,36 @@ class ScanController:
         self._recent = deque(maxlen=50)
 
         self._worker: threading.Thread | None = None
+
+    @staticmethod
+    def _make_stepper(config: Config, force_mock: bool):
+        """STEPPER.BACKEND: "gpio" (STEP/DIR am Pi) oder "esp32" (USB-Seriell)."""
+        s = config.STEPPER
+        backend = str(s.get("BACKEND", "gpio")).lower()
+        if backend == "esp32":
+            factory = None
+            if force_mock:
+                from .hardware.mock_esp32 import MockEsp32Serial
+                factory = MockEsp32Serial
+            return Esp32Stepper(
+                port=s.get("PORT", "auto"), step_angle=s["STEP_ANGLE"],
+                microsteps=s["MICROSTEPS"], gear_ratio=s["GEAR_RATIO"],
+                baudrate=s.get("BAUDRATE", 115200),
+                move_speed_dps=s.get("MOVE_SPEED_DPS", 20.0),
+                move_accel_dps2=s.get("MOVE_ACCEL_DPS2", 40.0),
+                dir_invert=bool(s.get("DIR_INVERT", False)),
+                report_ms=s.get("REPORT_MS", 20),
+                exclude_ports=(config.LIDAR["PORT"],),
+                serial_factory=factory,
+            )
+        if backend != "gpio":
+            raise ValueError(f"STEPPER.BACKEND unbekannt: {backend!r}")
+        return Stepper(
+            dir_pin=s["DIR_PIN"], step_pin=s["STEP_PIN"], ms_pins=s["MS_PINS"],
+            step_angle=s["STEP_ANGLE"], microsteps=s["MICROSTEPS"],
+            gear_ratio=s["GEAR_RATIO"], step_delay=s["STEP_DELAY"],
+            pwm_channel=config.MODE_B_CONTINUOUS["PWM_CHANNEL"], force_mock=force_mock,
+        )
 
     # ------------------------------------------------------------------
     def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
@@ -108,6 +133,8 @@ class ScanController:
             "scan_id": self.current_scan_id,
             "angle": round(self.stepper.get_current_angle(), 2),
             "lidar_running": self.lidar.running,
+            "stepper_backend": "esp32" if isinstance(self.stepper, Esp32Stepper) else "gpio",
+            "stepper_connected": bool(getattr(self.stepper, "connected", True)),
             "frames": len(self._frames),
             "stats": {
                 "packets_ok": self.lidar.stats.packets_ok,
