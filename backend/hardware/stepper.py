@@ -112,6 +112,9 @@ class Stepper:
         self._target_dps = abs(speed_dps)
         self._accel_dps2 = max(1e-3, accel_dps2)
         self._cur_dps = 0.0
+        # an die aktuelle (schrittgezählte) Position anschließen
+        with self._angle_lock:
+            self._cont_angle = self._steps / self.steps_per_degree
         self._cont_running = True
         self.pwm.start(self._freq_for(self._cur_dps))
         self._integrator = threading.Thread(target=self._integrate, daemon=True,
@@ -156,8 +159,11 @@ class Stepper:
             self._integrator = None
         self.pwm.stop()
         # integrierten Winkel in Schrittzähler überführen (für Modus-A-Homing)
+        # Danach ist wieder der Schrittzähler maßgeblich (move_angle/home
+        # nach einem Modus-B-Lauf positionieren sonst mit veraltetem Winkel).
         with self._angle_lock:
             self._steps = int(round(self._cont_angle * self.steps_per_degree))
+            self._cont_angle = 0.0
 
     # ------------------------------------------------------------------
     def home(self) -> None:
