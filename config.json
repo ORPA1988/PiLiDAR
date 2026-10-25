@@ -10,7 +10,7 @@
 
   "STEPPER": {
     "BACKEND": "esp32",
-    "PORT": "auto",
+    "PORT": "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0",
     "BAUDRATE": 115200,
     "MOVE_SPEED_DPS": 20.0,
     "MOVE_ACCEL_DPS2": 40.0,
