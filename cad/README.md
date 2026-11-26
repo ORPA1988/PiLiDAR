@@ -1,75 +1,74 @@
-# Scankopf v3 – drehende Plattform
+# Scankopf v3 – Turm nach Originalbauweise
 
-Unten steht nur der Stativfuß. Motor, Getriebe, STL27L mit USB-Board, Raspberry Pi, Kamera, IMU, Elektronik und Akku
-sitzen auf der Plattform und drehen mit. Über die Drehstelle läuft kein Kabel, der Drehwinkel ist nicht begrenzt.
-Der STL27L sitzt außen an der Frontwand; seine Scan-Ebene liegt 69 mm vor der Drehachse und sieht an Plattform,
-Fuß und Stativ vorbei.
+Aufbau und Maße folgen dem Original-PiLiDAR (Gehäuse 92 × 70 × 200 mm, hochkant, alles dreht mit).
+Neu gezeichnet als CAD-Code, weil es vom Original nur Netzdateien gibt.
 
 ![Vorschau](out/vorschau.png)
 
-## Aufbau
+## Unterschiede zum Original
 
-- Der Abtriebs-Vierkant des Getriebes (32 mm) steckt im Stativfuß und hält ihn gegen Verdrehen. Er trägt keine Last.
-- Die Plattform läuft auf zwei Kugellagern 6810-2RS im Abstand von 19 mm (Mitte zu Mitte) um den Fuß.
-- Der Getriebedeckel liegt auf dem Teller und wird von zwei Klemmleisten gehalten.
+| | Original | hier |
+|---|---|---|
+| Lagerung | Turm steht auf dem Getriebeabtrieb | zwei Kugellager 6810-2RS um einen Stativfuß; der Abtriebs-Vierkant hält nur gegen Verdrehen |
+| Scan-Ebene – Drehachse | 37,5 mm | 43,5 mm (die Lagerhülse hat 37 mm Radius und stünde sonst im Strahl) |
+| STL27L | auf Adapter, Lochabstand 45,9 mm | direkt auf der Rückwand, 46,8 / 31,92 mm nach Datenblatt |
+| LiDAR unter der Kameraachse | 41,9 mm | 31,0 mm |
+| Powerbank 91 × 63 × 22 | in einer Mulde der Rückschale | auf einer Auflage an der Rückwand, mit Band |
+| Elektronik | auf der Mittelplatte | am Lochraster des Frontdeckels (innen) |
+| Höhe über der Stativplatte | etwa 216 mm | 237 mm (Lagerfuß 37 mm statt 16 mm) |
 
 ## Teile (`out/*.stl`, `out/*.step`)
 
 | Datei | Teil | Drucklage |
 |---|---|---|
-| `1_stativfuss` | Zapfen Ø 50 mit Vierkant-Aufnahme, Schacht für die Stativmutter | Flansch auf dem Bett |
-| `2_teller` | Platte 92 × 102 mit Lagerhülse und Akkuauflage | Oberseite auf dem Bett (kopfüber) |
-| `3_aufbau` | vier Wände: LiDAR vorne, Pi links, Akku rechts, Lochraster hinten | wie exportiert |
-| `4_bruecke` | Deckplatte mit Kameraplatte (30 × 30, M2.5), IMU-Löcher, Raster fürs USB-Board | Platte auf dem Bett |
-| `5_klemmleiste` | hält den Getriebedeckel, **2 × drucken** | Senkungen nach unten |
+| `1_stativfuss` | Zapfen Ø 50 mit Vierkant-Aufnahme und Schacht für die Stativmutter | Flansch auf dem Bett |
+| `2_teller` | Bodenplatte 92 × 74 mit Lagerhülse | Oberseite auf dem Bett (kopfüber) |
+| `3_mitte` | Wanne 92 × 200 × 42: Rückwand mit allen Aufnahmen, Seitenwände, Klemmleisten für den Getriebedeckel | liegend, Rückwand auf dem Bett |
+| `4_front` | Deckel mit Objektivöffnung und Lochraster | Außenfläche auf dem Bett |
+| `5_akkutraeger` | Auflage für die Powerbank | Anlagefläche auf dem Bett |
 | `6_ring_oben`, `7_distanz_aussen`, `8_distanz_innen` | Lagerringe | flach |
-| `passprobe_*` | Fußoberteil (Vierkant und Lager-Innenring), Lagersitz | zuerst drucken |
+| `passprobe_*` | Fußoberteil (Vierkant, Lager-Innenring), Lagersitz | zuerst drucken |
 
-PETG, 0,2 mm, 4 Wände, 20 % Füllung. Größtes Teil 92 × 102 mm.
+PETG, 0,2 mm, 4 Wände, 20 % Füllung. Größtes Teil 92 × 200 mm (passt auf den MK4S).
 
 ## Kleinteile
 
 - 2 × Rillenkugellager 6810-2RS (50 × 65 × 7), 1 × Mutter 1/4"-20 UNC
-- 4 × M3 × 16 Teller → Aufbau (von unten), 4 × M3 × 12 Brücke, 4 × M3 × 8 Klemmleisten – alle direkt in den Kunststoff
-- 3 × M2 × 8 STL27L (direkt in den Kunststoff)
-- 4 × M2.5 × 12 mit 6-mm-Abstandshaltern und Muttern (Pi), 4 × M2.5 × 10 mit 3-mm-Abstandshaltern und Muttern (Kamera)
-- 2 × M3 × 6 (IMU GY-521), Klettband 12–15 mm (Akku), Kabelbinder
+- 4 × M3 × 16 (Teller → Mitte, von unten), 4 × M3 × 20 (Frontdeckel), 4 × M3 × 8 (Akkuträger), 2 × M3 × 6 (IMU)
+- 3 × M2 × 8 (STL27L), 4 × M2.5 × 6 (Pi), 4 × M2.5 × 8 (Kamera) – alle Schrauben direkt in den Kunststoff
+- Klettband bis 16 mm, Kabelbinder
 
 ## Montage
 
-1. In die Lagerhülse von unten: Ring oben (1 mm), Lager, beide Distanzringe, Lager.
-2. Stativmutter in den Schacht des Fußes fallen lassen, Fuß von unten in die Lager schieben.
-3. Aufbau auf den Teller setzen, 4 × M3 × 16 von unten.
-4. Motor mit Getriebe von oben einsetzen, Deckel nach unten. Der Vierkant greift in den Fuß.
-   Klemmleisten vorne und hinten auflegen, 4 × M3 × 8.
-5. STL27L außen an die Frontwand, Stecker oben; Kabel durch den Schlitz nach innen.
-6. Pi an die linke Wand (USB nach hinten), Akku an die rechte Wand auf die Arme, Band durch die zwei Schlitze.
-7. Brücke mit Kamera und IMU aufsetzen, 4 × M3 × 12. Elektronik mit Kabelbindern ans Lochraster der Rückwand.
+1. In die Lagerhülse von unten: Ring oben (1 mm), Lager, beide Distanzringe, Lager. Mutter in den Schacht des Fußes, Fuß einschieben.
+2. Motor mit Getriebe auf den Teller stellen, Deckel nach unten; der Vierkant greift in den Fuß.
+3. Mitte von oben über den Motor absenken. Die zwei Leisten greifen über den Deckelrand. 4 × M3 × 16 von unten.
+4. Pi (USB nach links, von vorne gesehen), Kamera und IMU auf die Rückwand schrauben.
+5. STL27L von hinten anschrauben, Stecker oben, Kabel durch den Schlitz. Akkuträger anschrauben, Powerbank aufsetzen,
+   Band oben durch die zwei Schlitze und unten durch den Motorausschnitt.
+6. ESP32, Treiber und Wandler mit Kabelbindern innen am Lochraster des Frontdeckels, Deckel mit 4 × M3 × 20 schließen.
 
 ## Maße für die Software (`out/geometrie.json`)
 
-- Abstand Scan-Ebene – Drehachse: **69,0 mm** (`MODEL_Y_OFFSET = -69.0`). Innerhalb dieses Radius um die Achse
-  (senkrecht über und unter dem Gerät) wird nichts erfasst.
-- Wegen des Abstands reichen 180° nicht: mindestens 207° für Objekte ab 0,3 m, 196° ab 0,5 m. Empfehlung 210° oder 360°.
-- LiDAR-Achse 64,9 mm, Kameraachse 114 mm, Gesamthöhe 136 mm über der Stativplatte.
+- `MODEL_Y_OFFSET = -43.5` (Abstand Scan-Ebene – Drehachse), LiDAR 31,0 mm unter der Kameraachse.
+- Mindest-Scanwinkel 197° für Objekte ab 0,3 m, 190° ab 0,5 m.
+- Hinter der Powerbank bleiben 5,0 mm bis zur Scan-Ebene (Original 4,9 mm); dickere Powerbanks stehen im Strahl.
 
-## Annahmen (Parameter in `plattform_v3.py`)
+## Annahmen (Parameter in `turm_v3.py`)
 
 | Annahme | Parameter |
 |---|---|
 | Getriebedeckel ist die PiLiDAR-Variante 52,3 × 52,3 × 3 mm | `LID_SQ`, `LID_T` |
-| Akku: Powerbank bis 150 × 75 × 22 mm | `AKKU_*`, `SH_X1` |
-| Raspberry Pi 4 oder 5 (Bohrbild 58 × 49) | `PI_Y`, `PI_Z` |
-| Eintrittspupille des Fischauges 15 mm vor dem Sensor | `CAM_PUPIL` |
+| Objektiv: Sensor 30 mm hinter der Frontfläche | `CAM_SENS` |
+| Raspberry Pi 4 oder 5 (Bohrbild 58 × 49) | `PI_*` |
 | Motorlänge 23 mm (17HS4023) | `MOTOR_L` |
-
-Getriebemaße stammen aus den Modelldateien (Printables 782336 und PiLiDAR-Hardware): Gehäuse 42,3 × 42,3 × 20 mm,
-Abtriebsfläche 16,0 mm unter der Deckel-Außenfläche.
 
 ## Neu erzeugen und prüfen
 
 ```
 pip install build123d trimesh shapely rtree matplotlib
-python cad/plattform_v3.py   # STEP, STL, geometrie.json
-python cad/pruefen.py        # Volumenkörper, Durchdringungen, freie Scan-Ebene, Schwerpunkt, Vorschau
+python cad/turm_v3.py     # STEP, STL, geometrie.json
+python cad/pruefen.py     # Volumenkörper, Durchdringungen, freie Scan-Ebene, Schwerpunkt, Vorschau
 ```
+
+Die STEP-Dateien lassen sich in Fusion öffnen und dort weiterbearbeiten.

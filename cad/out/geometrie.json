@@ -1,13 +1,13 @@
 {
-  "lidar_abstand_scanebene_mm": 69.0,
-  "lidar_achse_z_mm": 64.87,
-  "teller_oben_z_mm": 37.0,
-  "wand_oben_z_mm": 88.0,
-  "kamera_achse_z_mm": 114.0,
-  "gesamthoehe_mm": 136.0,
+  "lidar_abstand_scanebene_mm": 43.5,
+  "lidar_achse_z_mm": 180.02,
+  "kamera_achse_z_mm": 211.0,
+  "lidar_unter_kamera_mm": 30.98,
+  "turm_unterkante_z_mm": 37.0,
+  "gesamthoehe_mm": 237.0,
   "min_scanwinkel_grad": {
-    "0.3 m": 206.6,
-    "0.5 m": 195.9,
-    "1.0 m": 187.9
+    "0.3 m": 196.7,
+    "0.5 m": 190.0,
+    "1.0 m": 185.0
   }
 }
