@@ -1,0 +1,10 @@
+{
+  "z_abtrieb": 64.0,
+  "z_glocke_oben": 82.0,
+  "z_traeger_unten": 87.0,
+  "z_lidar_achse": 114.5,
+  "lidar_optik_y": 0.0,
+  "lidar_achse_x": 0.0,
+  "schatten_unten_grad": 43.6,
+  "hinweis": "Scan-Ebene y=0 enthaelt die Drehachse: Sollwert Achsversatz 0 / 0, Feinwert aus Kalibrierung"
+}
