@@ -1,4 +1,37 @@
-# Scankopf v3 – Turm nach Originalbauweise
+# Scankopf v3 – zwei Wege
+
+1. **Original-Gehäuse unverändert + Nachrüstsatz Lagerfuß** (empfohlen, wenn das Original-Gehäuse gedruckt wird oder schon vorhanden ist)
+2. **Turm neu gezeichnet** (`turm_v3.py`), gleiche Bauweise, als CAD-Code – siehe unten
+
+## Weg 1: Nachrüstsatz für das Original-Gehäuse
+
+Das Gehäuse aus [PiLiDAR-Hardware/FDM](https://github.com/PiLiDAR/PiLiDAR-Hardware/tree/main/FDM) bleibt, wie es ist.
+Getauscht wird nur der Getriebedeckel: `2_lagerdeckel_original.stl` ist der Original-Deckel (`gearbox_deckel`,
+CC BY-NC-SA 4.0, Philip Gutjahr) mit angeformter Scheibe und Lagerhülse. Der Turm läuft damit auf zwei Kugellagern
+6810-2RS um den Stativfuß; der Abtriebs-Vierkant steckt im Fuß und hält nur gegen Verdrehen.
+
+![Lagerdeckel](out/vorschau_lagerdeckel.png)
+
+| Datei | Teil | Drucklage |
+|---|---|---|
+| `2_lagerdeckel_original.stl` | ersetzt `gearbox_deckel` | Getriebeseite nach unten, Stützen nur vom Druckbett |
+| `1_stativfuss` | Zapfen mit Vierkant-Aufnahme und Stativmutter | Flansch auf dem Bett |
+| `6_ring_oben`, `7_distanz_aussen`, `8_distanz_innen` | Lagerringe | flach |
+| `passprobe_*` | zuerst drucken | |
+
+- Die vier Schrauben Deckel → Getriebe → Motor sitzen wie bisher, gleiche Länge; die Köpfe sind durch vier Löcher erreichbar.
+- Montage: Abtriebsplatte (32-mm-Vierkant) abziehen, Deckel tauschen, Abtriebsplatte von unten wieder aufstecken,
+  Lager und Ringe in die Hülse (Ring oben, Lager, zwei Distanzringe, Lager), Fuß mit Stativmutter einschieben.
+- Zukauf: 2 × Rillenkugellager 6810-2RS (50 × 65 × 7), 1 × Mutter 1/4"-20 UNC.
+- Der Turm steht 21 mm höher. Die Kalibrierwerte des Originals bleiben gültig (`POSITION [0, -37.5, -41.9]`).
+- Die Hülse (Radius 37 mm) endet 0,5 mm vor der Scan-Ebene. Sie streift nur den Strahlrand in etwa ± 7° um die Lotrechte,
+  also dort, wo ohnehin das Stativ steht.
+
+Neu erzeugen: `python cad/nachruest_original.py <Pfad>/PiLiDAR-Hardware/FDM/gearbox_deckel.obj` (braucht zusätzlich `manifold3d`).
+
+---
+
+# Weg 2: Turm nach Originalbauweise, neu gezeichnet
 
 Aufbau und Maße folgen dem Original-PiLiDAR (Gehäuse 92 × 70 × 200 mm, hochkant, alles dreht mit).
 Neu gezeichnet als CAD-Code, weil es vom Original nur Netzdateien gibt.
