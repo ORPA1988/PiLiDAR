@@ -11,7 +11,8 @@ const worker = new Worker('js/scan.worker.js');
 let ws = null;
 let viewMode = '2d';
 let totalPoints = 0;
-let lidarResDeg = 0;   // vertikale Winkelauflösung [°], live aus Frames gemessen
+let lidarResDeg = 0;
+let lastState = null;  // für das automatische Nachladen der Scan-Liste   // vertikale Winkelauflösung [°], live aus Frames gemessen
 
 v2d.start();
 // Nachleuchtzeit der 2D-Ansicht (je Browser gemerkt)
@@ -145,6 +146,9 @@ async function poll() {
   try {
     const s = await (await api('/api/status')).json();
     const b = $('state'); b.textContent = s.state;
+    // Scan-Liste nachladen, sobald ein Lauf (Scan/Kalibrierung) fertig ist
+    if (s.state === 'idle' && lastState && lastState !== 'idle' && lastState !== 'lidar_only') refreshScans();
+    lastState = s.state;
     b.className = 'badge ' + (s.state === 'idle' ? 'ok' : s.state === 'scanning' ? 'warn' : '');
     $('stAngle').textContent = s.angle;
     $('stRate').textContent = s.lidar_running ? Math.round(s.stats.packet_rate) : 0;
@@ -225,12 +229,13 @@ async function refreshScans() {
 async function loadScanInto3D(scanId) {
   clearView();
   // auf 3D-Ansicht umschalten
-  const radio3d = document.querySelector('input[name=view][value=3d]');
+  const radio3d = document.querySelector('input[name="view"][value="3d"]');
   radio3d.checked = true;
   applyViewMode();
+  $('stPts').textContent = 'lädt …';
   try {
     const r = await api(`/api/scans/${scanId}/pointcloud`);
-    if (!r.ok) { alert('Punktwolke nicht gefunden.'); return; }
+    if (!r.ok) { alert('Punktwolke nicht gefunden.'); $('stPts').textContent = '0'; return; }
     // Kompakter Binär-Buffer: uint32 n | float32[n*3] xyz | uint8[n] Intensität
     const buf = await r.arrayBuffer();
     const n = new Uint32Array(buf, 0, 1)[0];
@@ -245,7 +250,9 @@ async function loadScanInto3D(scanId) {
     totalPoints = n;
     $('stPts').textContent = totalPoints.toLocaleString('de-DE');
   } catch (e) {
-    alert('Fehler beim Laden der Punktwolke.');
+    console.error(e);
+    $('stPts').textContent = '0';
+    alert('Fehler beim Laden der Punktwolke: ' + e);
   }
 }
 
