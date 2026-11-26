@@ -1,10 +1,13 @@
 {
-  "z_abtrieb": 64.0,
-  "z_glocke_oben": 82.0,
-  "z_traeger_unten": 87.0,
-  "z_lidar_achse": 114.5,
-  "lidar_optik_y": 0.0,
-  "lidar_achse_x": 0.0,
-  "schatten_unten_grad": 43.6,
-  "hinweis": "Scan-Ebene y=0 enthaelt die Drehachse: Sollwert Achsversatz 0 / 0, Feinwert aus Kalibrierung"
+  "lidar_abstand_scanebene_mm": 69.0,
+  "lidar_achse_z_mm": 64.87,
+  "teller_oben_z_mm": 37.0,
+  "wand_oben_z_mm": 88.0,
+  "kamera_achse_z_mm": 114.0,
+  "gesamthoehe_mm": 136.0,
+  "min_scanwinkel_grad": {
+    "0.3 m": 206.6,
+    "0.5 m": 195.9,
+    "1.0 m": 187.9
+  }
 }

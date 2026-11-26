@@ -1,65 +1,75 @@
-# Scankopf v3 – Stufe 2 (gelagerter Abtrieb)
+# Scankopf v3 – drehende Plattform
 
-Motor, Getriebe und Gehäuse stehen fest auf dem Stativ. Es drehen nur Nabe, LiDAR-Träger und STL27L.
-Ein Rillenkugellager direkt unter dem Träger führt den Drehteil; das Getriebe überträgt das Drehmoment.
-Die Scan-Ebene des STL27L (y = 0) enthält die Drehachse, der Sollwert des Achsversatzes ist 0 / 0.
+Unten steht nur der Stativfuß. Motor, Getriebe, STL27L mit USB-Board, Raspberry Pi, Kamera, IMU, Elektronik und Akku
+sitzen auf der Plattform und drehen mit. Über die Drehstelle läuft kein Kabel, der Drehwinkel ist nicht begrenzt.
+Der STL27L sitzt außen an der Frontwand; seine Scan-Ebene liegt 69 mm vor der Drehachse und sieht an Plattform,
+Fuß und Stativ vorbei.
 
 ![Vorschau](out/vorschau.png)
+
+## Aufbau
+
+- Der Abtriebs-Vierkant des Getriebes (32 mm) steckt im Stativfuß und hält ihn gegen Verdrehen. Er trägt keine Last.
+- Die Plattform läuft auf zwei Kugellagern 6810-2RS im Abstand von 19 mm (Mitte zu Mitte) um den Fuß.
+- Der Getriebedeckel liegt auf dem Teller und wird von zwei Klemmleisten gehalten.
 
 ## Teile (`out/*.stl`, `out/*.step`)
 
 | Datei | Teil | Drucklage |
 |---|---|---|
-| `1_boden` | Scheibe Ø 78 × 8, Stativmutter 1/4", vier Eckpfosten als Motorführung | flach, Pfosten nach oben |
-| `2_glocke` | Stator Ø 78 × 74 mit Lagersitz, vier Rippen, vier Fenster | kopfüber (Lagersitz auf dem Bett), ohne Stützen |
-| `3_nabe` | Vierkant-Tasche 32,5 × 4 auf den Abtrieb, Zapfen Ø 29,9 für das Lager | Tasche nach unten (Brücke 32,5 mm) |
-| `4_lidartraeger` | Winkel mit Lochbild STL27L (3 × M2), Fenster, zwei Rippen | stehend, Boden auf dem Bett |
-| `passprobe_*` | Vierkant-Tasche, Lagersitz, Zapfen | zuerst drucken |
+| `1_stativfuss` | Zapfen Ø 50 mit Vierkant-Aufnahme, Schacht für die Stativmutter | Flansch auf dem Bett |
+| `2_teller` | Platte 92 × 102 mit Lagerhülse und Akkuauflage | Oberseite auf dem Bett (kopfüber) |
+| `3_aufbau` | vier Wände: LiDAR vorne, Pi links, Akku rechts, Lochraster hinten | wie exportiert |
+| `4_bruecke` | Deckplatte mit Kameraplatte (30 × 30, M2.5), IMU-Löcher, Raster fürs USB-Board | Platte auf dem Bett |
+| `5_klemmleiste` | hält den Getriebedeckel, **2 × drucken** | Senkungen nach unten |
+| `6_ring_oben`, `7_distanz_aussen`, `8_distanz_innen` | Lagerringe | flach |
+| `passprobe_*` | Fußoberteil (Vierkant und Lager-Innenring), Lagersitz | zuerst drucken |
 
-PETG, 0,2 mm, 4 Wände, 20–30 % Füllung. Drehende Druckteile zusammen höchstens 39 g (massiv gerechnet).
+PETG, 0,2 mm, 4 Wände, 20 % Füllung. Größtes Teil 92 × 102 mm.
 
 ## Kleinteile
 
-- 1 × Rillenkugellager 6806-2RS (30 × 42 × 7)
-- 1 × Schraube 1/4"-20 UNC × 3/4" (19 mm), Zylinderkopf mit Innensechskant: Nabe → Abtrieb
-- 1 × Mutter 1/4"-20 UNC (Stativmutter im Boden)
-- 4 × M3 × 16 Boden → Glocke, 4 × M3 × 20 Motorklemmung, 3 × M3 × 12 Träger → Nabe (direkt in den Kunststoff)
-- 3 × M2 × 8 mit Mutter für den STL27L
+- 2 × Rillenkugellager 6810-2RS (50 × 65 × 7), 1 × Mutter 1/4"-20 UNC
+- 4 × M3 × 16 Teller → Aufbau (von unten), 4 × M3 × 12 Brücke, 4 × M3 × 8 Klemmleisten – alle direkt in den Kunststoff
+- 3 × M2 × 8 STL27L (direkt in den Kunststoff)
+- 4 × M2.5 × 12 mit 6-mm-Abstandshaltern und Muttern (Pi), 4 × M2.5 × 10 mit 3-mm-Abstandshaltern und Muttern (Kamera)
+- 2 × M3 × 6 (IMU GY-521), Klettband 12–15 mm (Akku), Kabelbinder
 
 ## Montage
 
-1. Stativmutter in den Boden legen, Motor mit Getriebe zwischen die Eckpfosten stellen.
-2. Nabe auf den Abtriebs-Vierkant, 1/4"-Schraube durch die Mitte anziehen.
-3. Lager von oben in die Glocke drücken, Glocke über Motor und Nabe schieben (Zapfen gleitet ins Lager).
-4. Glocke von unten mit 4 × M3 × 16 verschrauben. Erst danach die vier Klemmschrauben gegenüberliegend
-   und nur bis zur Anlage anziehen – der Motor soll dort stehen bleiben, wo ihn das Lager hinführt.
-5. Träger mit 3 × M3 × 12 auf den Zapfen, STL27L mit dem Sockel an die Rückwand (Stecker zur Seite der zwei Laschen).
-6. Kabel in einer Schlaufe nach unten, Kabelbinder durch die zwei Löcher im Träger.
+1. In die Lagerhülse von unten: Ring oben (1 mm), Lager, beide Distanzringe, Lager.
+2. Stativmutter in den Schacht des Fußes fallen lassen, Fuß von unten in die Lager schieben.
+3. Aufbau auf den Teller setzen, 4 × M3 × 16 von unten.
+4. Motor mit Getriebe von oben einsetzen, Deckel nach unten. Der Vierkant greift in den Fuß.
+   Klemmleisten vorne und hinten auflegen, 4 × M3 × 8.
+5. STL27L außen an die Frontwand, Stecker oben; Kabel durch den Schlitz nach innen.
+6. Pi an die linke Wand (USB nach hinten), Akku an die rechte Wand auf die Arme, Band durch die zwei Schlitze.
+7. Brücke mit Kamera und IMU aufsetzen, 4 × M3 × 12. Elektronik mit Kabelbindern ans Lochraster der Rückwand.
 
-## Maße: gemessen, aus Dateien abgeleitet, zu prüfen
+## Maße für die Software (`out/geometrie.json`)
 
-| Größe | Wert | Herkunft |
-|---|---|---|
-| STL27L Lochbild, Höhe, optische Ebene 27,0 mm | 46,8 / 31,92 / 34,8 | Datenblatt Abschnitt 5.1 |
-| STL27L Sockel 38,1 mm, Lochlinie 10,3 mm von der Kante | ± 0,5 | aus der Datenblatt-Zeichnung abgegriffen |
-| Abtriebs-Vierkant 32,3 × 5 mm, Mutter 1/4" 7,6 mm unter der Außenfläche | – | `gearbox kameraplatte.obj` (PiLiDAR-Hardware) |
-| Getriebedeckel 52,3 mm, größter Radius 32,2 mm | – | `gearbox_deckel.obj` |
-| `GEAR_STACK_H` Motorstirnfläche → Außenfläche Abtrieb | 33 mm | aus den Dateien abgeleitet, **nicht gemessen** |
-| `MOTOR_L` | 23 mm | Typ 17HS4023 |
+- Abstand Scan-Ebene – Drehachse: **69,0 mm** (`MODEL_Y_OFFSET = -69.0`). Innerhalb dieses Radius um die Achse
+  (senkrecht über und unter dem Gerät) wird nichts erfasst.
+- Wegen des Abstands reichen 180° nicht: mindestens 207° für Objekte ab 0,3 m, 196° ab 0,5 m. Empfehlung 210° oder 360°.
+- LiDAR-Achse 64,9 mm, Kameraachse 114 mm, Gesamthöhe 136 mm über der Stativplatte.
 
-Der Zapfen lässt bei `GEAR_STACK_H` ± 4 mm zu (geprüft in `pruefen.py`). Liegt das Maß außerhalb von 29–37 mm,
-den Parameter in `kopf_v3.py` ändern und neu erzeugen.
+## Annahmen (Parameter in `plattform_v3.py`)
 
-## Eigenschaften
+| Annahme | Parameter |
+|---|---|
+| Getriebedeckel ist die PiLiDAR-Variante 52,3 × 52,3 × 3 mm | `LID_SQ`, `LID_T` |
+| Akku: Powerbank bis 150 × 75 × 22 mm | `AKKU_*`, `SH_X1` |
+| Raspberry Pi 4 oder 5 (Bohrbild 58 × 49) | `PI_Y`, `PI_Z` |
+| Eintrittspupille des Fischauges 15 mm vor dem Sensor | `CAM_PUPIL` |
+| Motorlänge 23 mm (17HS4023) | `MOTOR_L` |
 
-- LiDAR-Achse 36 mm über der Lagermitte, Gesamthöhe 142 mm ab Stativplatte.
-- Schatten nach unten: ± 43,6° um die Lotrechte (Glockenoberkante). Höher setzen verkleinert ihn, kostet aber Steifigkeit.
-- Schwerpunkt der drehenden Druckteile 7 mm neben der Achse; bei 1,9 °/s ohne Bedeutung.
+Getriebemaße stammen aus den Modelldateien (Printables 782336 und PiLiDAR-Hardware): Gehäuse 42,3 × 42,3 × 20 mm,
+Abtriebsfläche 16,0 mm unter der Deckel-Außenfläche.
 
 ## Neu erzeugen und prüfen
 
 ```
 pip install build123d trimesh shapely rtree matplotlib
-python cad/kopf_v3.py      # STEP, STL, geometrie.json
-python cad/pruefen.py      # Volumenkörper, Durchdringungen, Toleranz, Vorschau
+python cad/plattform_v3.py   # STEP, STL, geometrie.json
+python cad/pruefen.py        # Volumenkörper, Durchdringungen, freie Scan-Ebene, Schwerpunkt, Vorschau
 ```
