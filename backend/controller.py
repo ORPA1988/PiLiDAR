@@ -62,6 +62,7 @@ class ScanController:
         self.lidar = LidarReader(
             port=l["PORT"], baudrate=l["BAUDRATE"], angle_offset=l["ANGLE_OFFSET"],
             on_frame=self._on_frame, angle_provider=self.stepper.get_current_angle,
+            motor_control=bool(l.get("MOTOR_CONTROL", False)),
         )
         self.store = ScanStore(config.STORAGE["BASE_DIR"])
 

@@ -44,6 +44,14 @@ class MockSerial:
         self.stream = stream
         self.pos = 0
         self.packet_delay = packet_delay
+        self.written = bytearray()
+
+    def write(self, data):
+        self.written += data
+        return len(data)
+
+    def flush(self):
+        pass
 
     def read(self, n=1):
         out = bytearray()
@@ -85,6 +93,23 @@ def test_decode():
     assert reader.stats.crc_error_rate == 0.0
     print(f"OK  Decode: {len(frames)} Frames, speed={fr.speed_dps} dps, "
           f"angle0={fr.angles[0]:.2f}")
+
+
+def test_motor_commands():
+    pkt = build_packet()
+    # Standard: keine Befehle (RXD0 des ESP8266 auf dem Board kurzgeschlossen)
+    ser = MockSerial(pkt)
+    reader = LidarReader("mock", serial_factory=lambda: ser)
+    reader.start(); time.sleep(0.05); reader.stop()
+    reader.start(); time.sleep(0.05); reader.stop()
+    assert ser.written == b"", ser.written
+    # Mit Motorsteuerung: "0" beim Stopp, "1" beim Wiederanlauf
+    ser = MockSerial(pkt)
+    reader = LidarReader("mock", serial_factory=lambda: ser, motor_control=True)
+    reader.start(); time.sleep(0.05); reader.stop()
+    reader.start(); time.sleep(0.05); reader.stop()
+    assert ser.written == b"010", ser.written
+    print("OK  Motorbefehle: aus = nichts gesendet, an = b'010'")
 
 
 def test_pointcloud_geometry():
@@ -133,6 +158,7 @@ def test_mock_scan():
 if __name__ == "__main__":
     test_crc_roundtrip()
     test_decode()
+    test_motor_commands()
     test_pointcloud_geometry()
     test_mock_scan()
     print("\nAlle Trockentests bestanden.")

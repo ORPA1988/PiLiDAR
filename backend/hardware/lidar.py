@@ -109,6 +109,7 @@ class LidarReader:
         on_frame: Optional[Callable[[Frame], None]] = None,
         angle_provider: Optional[Callable[[], float]] = None,
         serial_factory: Optional[Callable[[], "serial.Serial"]] = None,
+        motor_control: bool = False,
     ):
         self.port = port
         self.baudrate = baudrate
@@ -117,6 +118,11 @@ class LidarReader:
         # liefert den aktuellen Plattformwinkel (vom Stepper) zum Stempeln der Frames
         self.angle_provider = angle_provider or (lambda: 0.0)
         self._serial_factory = serial_factory
+        # Spiegel per "1"/"0" schalten? Standard AUS: Auf dem vorhandenen Waveshare-Board
+        # ist RXD0 des ESP8266 mit ~22 Ohm nach GND kurzgeschlossen (messung/STAND.md),
+        # die Befehle kommen nie an. Der Spiegel dreht dann dauerhaft, solange das Board
+        # Strom hat; es wird nichts gesendet. Erst mit intaktem Board MOTOR_CONTROL=true.
+        self.motor_control = motor_control
 
         self._ser = None
         self._thread: Optional[threading.Thread] = None
@@ -153,12 +159,13 @@ class LidarReader:
         Idempotent: sendet den Befehl nur bei tatsächlichem Zustandswechsel, damit
         der Spiegel nicht versehentlich mehrfach hoch-/runtergefahren wird. Die
         ASCII-Zeichen "1"/"0" gehen über denselben Serial-Port (921600 Baud). Im
-        Mock-Modus oder bei Serial-Fehlern wird still ignoriert.
+        Mock-Modus oder bei Serial-Fehlern wird still ignoriert. Mit
+        motor_control=False wird nie etwas gesendet (Spiegel läuft durch).
         """
         if on == self._motor_on:
             return
         ser = self._ser
-        if ser is not None:
+        if ser is not None and self.motor_control:
             try:
                 if getattr(ser, "is_open", True):
                     ser.write(b"1" if on else b"0")
@@ -187,7 +194,7 @@ class LidarReader:
         if self._thread is not None:
             self._thread.join(timeout=2.0)
             self._thread = None
-        self._set_motor(False)  # Spiegelmotor stoppen
+        self._set_motor(False)  # Spiegelmotor stoppen (nur mit motor_control=True)
 
     @property
     def running(self) -> bool:

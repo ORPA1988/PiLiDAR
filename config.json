@@ -3,6 +3,7 @@
     "MODEL": "STL27L",
     "PORT": "/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_ba99d9a1b26eef11b05bbd7dc169b110-if00-port0",
     "BAUDRATE": 921600,
+    "MOTOR_CONTROL": false,
     "ANGLE_OFFSET": -1.05,
     "DISTANCE_MIN_MM": 30,
     "DISTANCE_MAX_MM": 25000
