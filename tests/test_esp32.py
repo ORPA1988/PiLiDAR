@@ -99,6 +99,22 @@ def test_gear_and_direction():
     print("OK  Getriebe-Umrechnung und DIR_INVERT")
 
 
+def test_release():
+    m = MockEsp32Serial()
+    st = _make(m)
+    try:
+        st.move_angle(10)
+        assert m.enabled
+        st.release()
+        assert not m.enabled, "release() muss EN 0 senden"
+        assert abs(st.get_current_angle() - 10) < 0.05, "Position muss erhalten bleiben"
+        st.home()                       # nächste Bewegung schaltet wieder ein
+        assert m.enabled and m.pos == 0
+    finally:
+        st.close()
+    print("OK  release(): Treiber aus, Position bleibt, Wiedereinschalten bei Bewegung")
+
+
 def test_not_connected():
     st = Esp32Stepper(port="/dev/serial/by-id/gibt-es-nicht", gear_ratio=GEAR)
     try:
@@ -121,5 +137,6 @@ if __name__ == "__main__":
     test_mode_b_tracking()
     test_micros_wrap()
     test_gear_and_direction()
+    test_release()
     test_not_connected()
     print("\nAlle ESP32-Tests bestanden.")

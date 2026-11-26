@@ -553,6 +553,16 @@ class Esp32Stepper:
             self.stop_continuous(ramp_down=True)
         self._move_fw_steps(0, absolute=True)
 
+    def release(self) -> None:
+        """Treiber abschalten (EN 0): Motor stromlos, kein Fiepen/Erwärmen im
+        Stillstand. Die Schrittposition bleibt in der Firmware erhalten; die
+        nächste Bewegung schaltet über _ensure_ready() wieder ein."""
+        with self._cmd_lock:
+            if not self._connected or not self._fw_enabled or self._fw_moving:
+                return
+            self._cmd("EN 0")
+            self._fw_enabled = False
+
     def close(self) -> None:
         self._closing = True
         try:

@@ -5,6 +5,7 @@ broadcastet sie an WebSocket-Clients und speichert je Scan einen Ordner.
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 import time
 from collections import deque
@@ -18,6 +19,8 @@ from .hardware.stepper_esp32 import Esp32Stepper
 from .pointcloud import build_pointcloud
 from .qa import compute_qa
 from .storage import ScanStore
+
+log = logging.getLogger(__name__)
 
 STATE_IDLE = "idle"
 STATE_LIDAR_ONLY = "lidar_only"
@@ -218,8 +221,20 @@ class ScanController:
         self.state = STATE_PROCESSING
         self._finalize(scan_id, mode, scan_angle, overlap, t0)
         self.stepper.home()
+        self._release_stepper()
         self.current_scan_id = None
         self.state = STATE_IDLE
+
+    def _release_stepper(self) -> None:
+        """Nach Scan/Kalibrierung den Treiber abschalten (STEPPER.RELEASE_AFTER_SCAN,
+        Standard an): sonst hält der A4988 im Stillstand Strom, der Motor fiept
+        und wird warm."""
+        if not bool(self.cfg.STEPPER.get("RELEASE_AFTER_SCAN", True)):
+            return
+        try:
+            self.stepper.release()
+        except Exception as exc:  # Abschalten darf den Ablauf nicht abbrechen
+            log.warning("Treiber abschalten fehlgeschlagen: %s", exc)
 
     def _run_mode_a(self) -> None:
         cfg = self.cfg.MODE_A_STEPWISE
@@ -312,6 +327,7 @@ class ScanController:
             result = calibrate_rotation(frames, self.cfg.STEPPER["GEAR_RATIO"])
         finally:
             self.stepper.home()
+            self._release_stepper()
             self.state = STATE_IDLE
         return result
 
@@ -346,6 +362,7 @@ class ScanController:
                                       scan_angle, overlap)
         finally:
             self.stepper.home()
+            self._release_stepper()
             self.state = STATE_IDLE
         return result
 

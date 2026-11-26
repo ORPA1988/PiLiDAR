@@ -147,6 +147,9 @@ def test_mock_scan():
         if ctrl.state == "idle":
             break
         time.sleep(0.05)
+    ser = getattr(ctrl.stepper, "_ser", None)
+    if ser is not None and hasattr(ser, "enabled"):   # ESP32-Backend (Mock)
+        assert not ser.enabled, "Treiber muss nach dem Scan abgeschaltet sein"
     ctrl.close()
     d = Path(cfg.STORAGE["BASE_DIR"]) / scan_id
     assert (d / "meta.json").exists(), "meta.json fehlt"

@@ -177,6 +177,9 @@ class Stepper:
             self._cont_angle = 0.0
             self._steps = 0
 
+    def release(self) -> None:
+        """Treiber abschalten – ohne EN-Pin (GPIO-Variante) nicht möglich: No-op."""
+
     def close(self) -> None:
         try:
             if self._cont_running:
