@@ -118,7 +118,9 @@ async def api_scan_start(payload: dict | None = None):
     sa, ov = payload.get("scan_angle"), payload.get("overlap_deg")
     scan_id = controller.start_scan(mode=mode, name=name,
                                     scan_angle=None if sa is None else float(sa),
-                                    overlap_deg=None if ov is None else float(ov))
+                                    overlap_deg=None if ov is None else float(ov),
+                                    steps_per_measure=payload.get("steps_per_measure"),
+                                    max_packages=payload.get("max_packages"))
     return {"ok": True, "scan_id": scan_id}
 
 

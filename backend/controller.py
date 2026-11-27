@@ -192,7 +192,8 @@ class ScanController:
     MAX_SCAN_ANGLE = 380.0   # LiDAR-Kabel: hoechstens gut eine Umdrehung (370°-Kalibrierlauf)
 
     def start_scan(self, mode: str = "B", name: str = "", scan_angle: float | None = None,
-                   overlap_deg: float | None = None) -> str:
+                   overlap_deg: float | None = None, steps_per_measure: int | None = None,
+                   max_packages: int | None = None) -> str:
         """scan_angle/overlap_deg: nur für diesen Scan (Modus B), z. B. 210/30 für Prüfscans."""
         if self.state not in (STATE_IDLE, STATE_LIDAR_ONLY):
             raise RuntimeError(f"Beschäftigt: {self.state}")
@@ -203,6 +204,9 @@ class ScanController:
         ov = float(overlap_deg) if overlap_deg is not None else (
             max(0.0, sa - 180.0) if scan_angle is not None else float(self.cfg.MODE_B_CONTINUOUS["OVERLAP_DEG"]))
         self._scan_params = (sa, min(ov, max(0.0, sa - 180.0)))
+        # Modus A nur für diesen Scan: Mikroschritte je Ebene / LiDAR-Pakete je Ebene
+        # (Original-PiLiDAR: 6 Schritte, 180 Pakete = eine volle LiDAR-Umdrehung im Stillstand)
+        self._mode_a_params = (steps_per_measure, max_packages, float(scan_angle) if scan_angle is not None else None)
         # Den LiDAR-Spiegel beim Übergang aus 2D-Live NICHT aus- und wieder
         # einschalten – er soll durchgehend laufen. lidar.start() in _run_scan
         # ist idempotent (No-op, falls bereits aktiv).
@@ -227,7 +231,8 @@ class ScanController:
         try:
             if mode.upper() == "A":
                 self._run_mode_a()
-                scan_angle = self.cfg.MODE_A_STEPWISE["SCAN_ANGLE"]
+                _oa = (getattr(self, "_mode_a_params", None) or (None, None, None))[2]
+                scan_angle = _oa if _oa is not None else self.cfg.MODE_A_STEPWISE["SCAN_ANGLE"]
                 overlap = 0.0
             else:
                 scan_angle, overlap = getattr(self, "_scan_params", None) or (
@@ -258,11 +263,12 @@ class ScanController:
 
     def _run_mode_a(self) -> None:
         cfg = self.cfg.MODE_A_STEPWISE
-        scan_angle = cfg["SCAN_ANGLE"]
-        spm = max(1, int(cfg["STEPS_PER_MEASURE"]))
+        o_spm, o_pk, o_sa = getattr(self, "_mode_a_params", None) or (None, None, None)
+        scan_angle = o_sa if o_sa is not None else cfg["SCAN_ANGLE"]
+        spm = max(1, int(o_spm if o_spm is not None else cfg["STEPS_PER_MEASURE"]))
         delay = float(cfg["SCAN_DELAY"])
-        max_pkgs = int(cfg["MAX_PACKAGES"])
-        timeout = delay * 5  # maximale Wartezeit pro Schritt
+        max_pkgs = int(o_pk if o_pk is not None else cfg["MAX_PACKAGES"])
+        timeout = max(delay * 5, max_pkgs / 1800.0 * 3)  # maximale Wartezeit pro Schritt
 
         while self.stepper.get_current_angle() < scan_angle and self.state == STATE_SCANNING:
             self.stepper.move_steps(spm)
