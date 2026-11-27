@@ -80,6 +80,14 @@ bis in der Oberfläche „Ausgangslage bestätigen“ geklickt wird (`POST /api/
 Scans (`POST /api/calibrate/offset_from_scan`, ~3 s). Der Messlauf „Offset (>180°)“ macht dasselbe
 mit einem neuen Scan.
 
+**Oberfläche (3D).** Farbe nach Intensität/Höhe/Entfernung/Drehwinkel/Scan-Nummer, Höhenschnitt
+(„Decke aus“), Ansichten, Verschieben, Messen (zwei Punkte), Scans überlagern („+“ in der Liste),
+Fortschritt mit Restzeit, Selbsttest (`GET /api/selftest`).
+
+**Export (Browser).** PLY und LAS 1.2 der sichtbaren Punkte (optional ausgedünnt), PNG der Ansicht,
+**Grundriss** (`frontend/js/floorplan.js`): nur senkrechte Flächen, Wände per RANSAC, Raummaße,
+Fläche, Höhe; DXF (Schichten WAENDE, SCANPUNKTE, MASSE; Meter) und SVG 1:10.
+
 **Bedienfehler** kommen als HTTP 409 mit `{"error": "…"}` und erscheinen unten rechts.
 
 **Frontend-Updates:** Versionskennung `?v=…` in `frontend/index.html` und `ASSET_VERSION` in
