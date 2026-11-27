@@ -80,7 +80,16 @@ async def _no_stale_frontend(request: Request, call_next):
 # --- REST -------------------------------------------------------------
 @app.get("/api/status")
 async def api_status():
-    return controller.status()
+    st = controller.status()
+    st["scan_angle"] = config.MODE_B_CONTINUOUS["SCAN_ANGLE"]   # für Fortschrittsanzeige
+    st["speed_dps"] = config.MODE_B_CONTINUOUS["SPEED_DPS"]
+    return st
+
+
+@app.get("/api/selftest")
+async def api_selftest():
+    """Selbsttest ohne Bewegung (Ports, ESP32, Speicher, Einstellungen)."""
+    return await asyncio.to_thread(controller.selftest)
 
 
 @app.get("/api/config")

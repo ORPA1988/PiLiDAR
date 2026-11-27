@@ -62,5 +62,25 @@ function exportLAS(xyz, inten, total, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
+/* Voxel-Ausdünnung: je Würfel (Kantenlänge cell [m]) ein Punkt (Mittelwert). */
+function thinPoints(v, cell) {
+  if (!(cell > 0)) return v;
+  const B = 131072, map = new Map();
+  for (let i = 0; i < v.total; i++) {
+    const x = v.xyz[i * 3], y = v.xyz[i * 3 + 1], z = v.xyz[i * 3 + 2];
+    const key = (Math.floor(x / cell) + B) * 17179869184 + (Math.floor(y / cell) + B) * 131072 + (Math.floor(z / cell) + B);
+    const a = map.get(key);
+    if (a) { a[0] += x; a[1] += y; a[2] += z; a[3] += v.inten[i]; a[4]++; }
+    else map.set(key, [x, y, z, v.inten[i], 1]);
+  }
+  const n = map.size, xyz = new Float32Array(n * 3), inten = new Float32Array(n);
+  let k = 0;
+  for (const a of map.values()) {
+    xyz[k * 3] = a[0] / a[4]; xyz[k * 3 + 1] = a[1] / a[4]; xyz[k * 3 + 2] = a[2] / a[4]; inten[k] = a[3] / a[4]; k++;
+  }
+  return { xyz, inten, total: n };
+}
+
 window.exportPLY = exportPLY;
+window.thinPoints = thinPoints;
 window.exportLAS = exportLAS;

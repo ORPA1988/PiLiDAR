@@ -206,6 +206,9 @@ def test_mock_scan():
         if ctrl.state == "idle":
             break
         time.sleep(0.05)
+    st = ctrl.selftest()
+    assert st["status"] in ("ok", "warn", "error") and len(st["checks"]) >= 5, st
+    assert any("size_mb" in m for m in ctrl.store.list_scans())
     ser = getattr(ctrl.stepper, "_ser", None)
     if ser is not None and hasattr(ser, "enabled"):   # ESP32-Backend (Mock)
         assert not ser.enabled, "Treiber muss nach dem Scan abgeschaltet sein"

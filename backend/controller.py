@@ -381,6 +381,42 @@ class ScanController:
             self.state = STATE_IDLE
         return result
 
+    def selftest(self) -> dict:
+        """Kurzer Selbsttest ohne Bewegung: LiDAR-Port, ESP32, Speicher, Konfiguration."""
+        import os
+        import shutil
+        checks = []
+
+        def add(name, ok, detail, level="error"):
+            checks.append({"name": name, "ok": bool(ok), "level": "ok" if ok else level, "detail": detail})
+
+        port = self.cfg.LIDAR["PORT"]
+        add("LiDAR-Port", os.path.exists(port) or str(port).startswith("mock"),
+            port if os.path.exists(port) else f"nicht gefunden: {port}")
+        connected = bool(getattr(self.stepper, "connected", True))
+        add("Schrittmotor-Steuerung", connected,
+            "verbunden" if connected else "ESP32 nicht verbunden (USB?)")
+        lost = bool(getattr(self.stepper, "position_lost", False))
+        add("Position des Drehkopfs", not lost,
+            "bekannt" if not lost else "unbekannt – Ausgangslage bestätigen", level="warn")
+        try:
+            du = shutil.disk_usage(str(self.store.base))
+            free_gb = du.free / 1e9
+            add("Speicherplatz", free_gb > 2, f"{free_gb:.1f} GB frei", level="warn" if free_gb > 0.5 else "error")
+        except OSError as exc:
+            add("Speicherplatz", False, str(exc))
+        lc = self.cfg.LIDAR
+        add("LiDAR-Motorbefehle", True, "aus (Board-RX defekt)" if not lc.get("MOTOR_CONTROL") else "an")
+        add("Treiber nach Scan aus", bool(self.cfg.STEPPER.get("RELEASE_AFTER_SCAN", True)),
+            "ja" if self.cfg.STEPPER.get("RELEASE_AFTER_SCAN", True) else "nein (Motor bleibt bestromt)", level="warn")
+        worst = "ok"
+        for c in checks:
+            if c["level"] == "error":
+                worst = "error"
+            elif c["level"] == "warn" and worst == "ok":
+                worst = "warn"
+        return {"status": worst, "checks": checks}
+
     def offset_from_scan(self, scan_id: str) -> dict:
         """Offset-Kalibrierung aus den Rohdaten eines gespeicherten Scans – ohne Motor
         und LiDAR (Modus-B-Scan mit Überlappung nötig)."""

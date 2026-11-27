@@ -5,13 +5,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PiLiDAR 2.0</title>
-  <link rel="stylesheet" href="css/style.css?v=20261127i" />
+  <link rel="stylesheet" href="css/style.css?v=20261127j" />
 </head>
 <body>
   <header>
     <h1>PiLiDAR&nbsp;2.0</h1>
     <span id="state" class="badge">–</span>
     <span id="qa" class="badge"></span>
+    <div id="progress" class="progress hidden"><div id="progressBar"></div><span id="progressTxt"></span></div>
   </header>
 
   <div id="posBanner" class="banner hidden">
@@ -92,6 +93,8 @@
             <option value="1">Höhe</option>
             <option value="2">Entfernung</option>
             <option value="3">einfarbig</option>
+            <option value="4">Drehwinkel (Diagnose)</option>
+            <option value="5">Scan-Nummer (überlagert)</option>
           </select>
         </label>
         <label>Punktgröße <input id="ptSize" type="range" min="1" max="6" step="0.5" value="2" /></label>
@@ -113,6 +116,9 @@
 
       <div class="group">
         <strong>Export</strong>
+        <label title="Je Würfel nur ein Punkt – kleinere Dateien, gleichmäßige Dichte">Ausdünnen
+          <select id="thinCell"><option value="0">aus</option><option value="0.005">5 mm</option>
+            <option value="0.01">1 cm</option><option value="0.02">2 cm</option><option value="0.05">5 cm</option></select></label>
         <button id="btnPly" class="secondary" title="Sichtbare Punkte (mit Höhenschnitt) als binäres PLY">PLY (sichtbar)</button>
         <button id="btnLas" class="secondary" title="Sichtbare Punkte als LAS 1.2 (CloudCompare, QGIS)">LAS (sichtbar)</button>
         <button id="btnPng" class="secondary" title="Aktuelle 3D-Ansicht als Bild">Bild (PNG)</button>
@@ -138,6 +144,7 @@
 
       <div class="group">
         <strong>System-Steuerung</strong>
+        <button id="btnSelftest" class="secondary">Selbsttest</button>
         <button id="btnReboot" class="secondary">&#8635; Neustart</button>
         <button id="btnPoweroff" class="danger">&#9210; Ausschalten</button>
       </div>
@@ -155,10 +162,10 @@
     </section>
   </main>
 
-  <script src="js/viewer2d.js?v=20261127i"></script>
-  <script src="js/viewer3d.js?v=20261127i"></script>
-  <script src="js/export.js?v=20261127i"></script>
-  <script src="js/floorplan.js?v=20261127i"></script>
-  <script src="js/app.js?v=20261127i"></script>
+  <script src="js/viewer2d.js?v=20261127j"></script>
+  <script src="js/viewer3d.js?v=20261127j"></script>
+  <script src="js/export.js?v=20261127j"></script>
+  <script src="js/floorplan.js?v=20261127j"></script>
+  <script src="js/app.js?v=20261127j"></script>
 </body>
 </html>

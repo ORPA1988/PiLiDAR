@@ -195,3 +195,7 @@ button.active { outline: 2px solid var(--warn); }
   max-width: 95vw; max-height: 95vh; overflow: auto; }
 .dialog-head { display: flex; justify-content: space-between; align-items: center; }
 #floorCanvas { background: #fff; border-radius: 6px; max-width: 100%; }
+
+.progress { position: relative; width: 220px; height: 16px; background: #1d232b; border-radius: 8px; overflow: hidden; }
+#progressBar { height: 100%; width: 0; background: linear-gradient(90deg, #2e7d4f, #4caf50); transition: width .5s; }
+#progressTxt { position: absolute; inset: 0; font-size: 11px; line-height: 16px; text-align: center; color: #e8eef5; }

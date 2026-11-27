@@ -9,7 +9,7 @@
 'use strict';
 
 const VERT = `
-attribute vec3 aPos; attribute float aInt;
+attribute vec3 aPos; attribute float aInt; attribute float aZa; attribute float aSrc;
 uniform mat4 uMVP; uniform float uSize;
 uniform mediump int uMode; uniform vec2 uRange; uniform vec2 uClip;
 varying float vVal; varying float vCut;
@@ -19,6 +19,8 @@ void main(){
   float v = aInt;                                   // 0: Intensität
   if (uMode == 1) v = aPos.z;                       // 1: Höhe
   else if (uMode == 2) v = length(aPos);            // 2: Entfernung zum Scanner
+  else if (uMode == 4) v = aZa;                     // 4: Drehwinkel (Diagnose: Naht, Lücken)
+  else if (uMode == 5) v = aSrc;                    // 5: Scan-Nummer (überlagerte Scans)
   vVal = (v - uRange.x) / max(uRange.y - uRange.x, 1e-6);
   vCut = (aPos.z < uClip.x || aPos.z > uClip.y) ? 1.0 : 0.0;
 }`;
@@ -81,6 +83,9 @@ class Viewer3D {
     this.prog = this._program(VERT, FRAG);
     this.aPos = gl.getAttribLocation(this.prog, 'aPos');
     this.aInt = gl.getAttribLocation(this.prog, 'aInt');
+    this.aZa = gl.getAttribLocation(this.prog, 'aZa');
+    this.aSrc = gl.getAttribLocation(this.prog, 'aSrc');
+    this.nSources = 1;
     this.u = {};
     for (const n of ['uMVP', 'uSize', 'uMode', 'uRange', 'uClip']) this.u[n] = gl.getUniformLocation(this.prog, n);
     this.lineProg = this._program(LINE_VERT, LINE_FRAG);
@@ -90,8 +95,9 @@ class Viewer3D {
     this.tmpBuf = gl.createBuffer();
 
     this.chunks = [];          // {posBuf, intBuf, count, pos (CPU), inten (CPU)}
-    this.pending = { xyz: [], inten: [] };
+    this.pending = { xyz: [], inten: [], za: [], src: [] };
     this.bbox = null;          // {min:[x,y,z], max:[x,y,z], rmax}
+    this.zaMax = 0;
     this.total = 0;
 
     // Darstellung
@@ -242,8 +248,12 @@ class Viewer3D {
   }
 
   // --- Daten -------------------------------------------------------------
-  addPoints(xyz, inten) {
+  addPoints(xyz, inten, za, src = 0) {
+    const n = inten.length;
     this.pending.xyz.push(xyz); this.pending.inten.push(inten);
+    this.pending.za.push(za && za.length === n ? za : new Float32Array(n));
+    this.pending.src.push(new Float32Array(n).fill(src));
+    if (src + 1 > this.nSources) this.nSources = src + 1;
     let n = 0; for (const a of this.pending.xyz) n += a.length;
     if (n >= 15000) this._flush();
   }
@@ -253,11 +263,14 @@ class Viewer3D {
     let n3 = 0; for (const a of this.pending.xyz) n3 += a.length;
     if (n3 === 0) return;
     const pos = new Float32Array(n3); const it = new Float32Array(n3 / 3);
+    const za = new Float32Array(n3 / 3), src = new Float32Array(n3 / 3);
     let o = 0, io = 0;
     for (let i = 0; i < this.pending.xyz.length; i++) {
       pos.set(this.pending.xyz[i], o); o += this.pending.xyz[i].length;
-      it.set(this.pending.inten[i], io); io += this.pending.inten[i].length;
+      it.set(this.pending.inten[i], io); za.set(this.pending.za[i], io); src.set(this.pending.src[i], io);
+      io += this.pending.inten[i].length;
     }
+    for (let i = 0; i < za.length; i++) if (za[i] > this.zaMax) this.zaMax = za[i];
     // Ausdehnung fortschreiben
     const b = this.bbox || { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity], rmax: 0 };
     for (let i = 0; i < pos.length; i += 3) {
@@ -270,17 +283,19 @@ class Viewer3D {
     this.bbox = b;
     const posBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, posBuf); gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
     const intBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, intBuf); gl.bufferData(gl.ARRAY_BUFFER, it, gl.STATIC_DRAW);
-    this.chunks.push({ posBuf, intBuf, count: n3 / 3, pos, inten: it });
+    const zaBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, zaBuf); gl.bufferData(gl.ARRAY_BUFFER, za, gl.STATIC_DRAW);
+    const srcBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, srcBuf); gl.bufferData(gl.ARRAY_BUFFER, src, gl.STATIC_DRAW);
+    this.chunks.push({ posBuf, intBuf, zaBuf, srcBuf, count: n3 / 3, pos, inten: it, za, src });
     this.total += n3 / 3;
-    this.pending = { xyz: [], inten: [] };
+    this.pending = { xyz: [], inten: [], za: [], src: [] };
     this._updateLegend();
   }
 
   clear() {
     const gl = this.gl;
-    for (const c of this.chunks) { gl.deleteBuffer(c.posBuf); gl.deleteBuffer(c.intBuf); }
-    this.chunks = []; this.pending = { xyz: [], inten: [] };
-    this.bbox = null; this.total = 0; this.picks = []; this._showMeasure();
+    for (const c of this.chunks) for (const b of [c.posBuf, c.intBuf, c.zaBuf, c.srcBuf]) gl.deleteBuffer(b);
+    this.chunks = []; this.pending = { xyz: [], inten: [], za: [], src: [] };
+    this.bbox = null; this.total = 0; this.picks = []; this.zaMax = 0; this.nSources = 1; this._showMeasure();
     this._updateLegend();
   }
 
@@ -314,14 +329,16 @@ class Viewer3D {
     if (this.colorMode === 0) return [0, 255];
     if (!b) return [0, 1];
     if (this.colorMode === 1) return [Math.max(b.min[2], this.clip[0]), Math.min(b.max[2], this.clip[1])];
+    if (this.colorMode === 4) return [0, Math.max(this.zaMax, 1)];
+    if (this.colorMode === 5) return [0, Math.max(this.nSources - 1, 1)];
     return [0, Math.min(Math.sqrt(b.rmax), 10)];
   }
 
   _updateLegend() {
     if (!this._legendEl) return;
-    const names = ['Intensität', 'Höhe [m]', 'Entfernung [m]', 'einfarbig'];
+    const names = ['Intensität', 'Höhe [m]', 'Entfernung [m]', 'einfarbig', 'Drehwinkel [°]', 'Scan Nr.'];
     const r = this._range();
-    const fmt = v => this.colorMode === 0 ? v.toFixed(0) : v.toFixed(2);
+    const fmt = v => (this.colorMode === 0 || this.colorMode >= 4) ? v.toFixed(0) : v.toFixed(2);
     this._legendEl.innerHTML = this.colorMode === 3 || this.colorMode === 0 ? `<span>${names[this.colorMode]}</span>`
       : `<span>${names[this.colorMode]}</span><div class="bar"></div><span class="lo">${fmt(r[0])}</span><span class="hi">${fmt(r[1])}</span>`;
     const b = this.bbox;
@@ -393,6 +410,7 @@ class Viewer3D {
   _drawLines(mvp) {
     const gl = this.gl;
     gl.useProgram(this.lineProg);
+    for (const a of [this.aInt, this.aZa, this.aSrc]) if (a >= 0 && a !== this.lAPos) gl.disableVertexAttribArray(a);
     gl.uniformMatrix4fv(this.lU.mvp, false, mvp);
     gl.uniform1f(this.lU.size, 9.0 * devicePixelRatio);
     gl.enableVertexAttribArray(this.lAPos);
@@ -437,6 +455,10 @@ class Viewer3D {
       gl.vertexAttribPointer(this.aPos, 3, gl.FLOAT, false, 0, 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, c.intBuf); gl.enableVertexAttribArray(this.aInt);
       gl.vertexAttribPointer(this.aInt, 1, gl.FLOAT, false, 0, 0);
+      if (this.aZa >= 0) { gl.bindBuffer(gl.ARRAY_BUFFER, c.zaBuf); gl.enableVertexAttribArray(this.aZa);
+        gl.vertexAttribPointer(this.aZa, 1, gl.FLOAT, false, 0, 0); }
+      if (this.aSrc >= 0) { gl.bindBuffer(gl.ARRAY_BUFFER, c.srcBuf); gl.enableVertexAttribArray(this.aSrc);
+        gl.vertexAttribPointer(this.aSrc, 1, gl.FLOAT, false, 0, 0); }
       gl.drawArrays(gl.POINTS, 0, c.count);
     }
     this._drawLines(mvp);

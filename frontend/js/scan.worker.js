@@ -24,6 +24,7 @@ function transformBlock(z, a, d, it, f0, n) {
   const oy = cfg.model_y, oz = cfg.model_z, dmin = cfg.dist_min, dmax = cfg.dist_max;
   const xyz = new Float32Array(n * 12 * 3);
   const inten = new Float32Array(n * 12);
+  const za = new Float32Array(n * 12);              // Drehwinkel je Punkt (Diagnose-Farbe)
   let k = 0;
   for (let f = f0; f < f0 + n; f++) {
     const za = -z[f] * D2R, cz = Math.cos(za), sz = Math.sin(za);
@@ -39,10 +40,11 @@ function transformBlock(z, a, d, it, f0, n) {
       xyz[k * 3 + 1] = (px * sz + py * cz) / 1000;
       xyz[k * 3 + 2] = pz / 1000;
       inten[k] = it[j];
+      za[k] = z[f];
       k++;
     }
   }
-  return { xyz: xyz.subarray(0, k * 3), inten: inten.subarray(0, k) };
+  return { xyz: xyz.subarray(0, k * 3), inten: inten.subarray(0, k), za: za.subarray(0, k) };
 }
 
 function emit(res, extra) {
@@ -51,7 +53,8 @@ function emit(res, extra) {
   allXYZ.push(xyz); allINT.push(inten);
   totalPoints += inten.length;
   // Kopie an den Viewer; Master bleibt für den Export
-  self.postMessage({ type: 'points', xyz: xyz.slice(), inten: inten.slice(), total: totalPoints, ...extra });
+  self.postMessage({ type: 'points', xyz: xyz.slice(), inten: inten.slice(), za: res.za.slice(),
+                     total: totalPoints, ...extra });
 }
 
 /* Puffer mit Kopf uint32 n und danach Feldern in fester Reihenfolge zerlegen. */
@@ -79,7 +82,7 @@ self.onmessage = (ev) => {
     const STEP = 20000;                            // Frames je Block
     for (let f = 0; f < r.n; f += STEP) {
       const m = Math.min(STEP, r.n - f);
-      emit(transformBlock(r.z, r.a, r.d, r.it, f, m), { progress: (f + m) / r.n, scanId: msg.scanId });
+      emit(transformBlock(r.z, r.a, r.d, r.it, f, m), { progress: (f + m) / r.n, scanId: msg.scanId, src: msg.src || 0 });
     }
     self.postMessage({ type: 'rawDone', scanId: msg.scanId, total: totalPoints });
   } else if (msg.type === 'clear') {

@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127i';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127j';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -68,7 +68,7 @@ applyViewMode();  // 3D-Labels-Overlay beim Start korrekt ausblenden
 worker.onmessage = (ev) => {
   const m = ev.data;
   if (m.type === 'points') {
-    v3d.addPoints(m.xyz, m.inten);
+    v3d.addPoints(m.xyz, m.inten, m.za, m.src || 0);
     totalPoints = m.total;
     $('stPts').textContent = m.progress !== undefined && m.progress < 1
       ? `${totalPoints.toLocaleString('de-DE')} (${Math.round(m.progress * 100)} %)`
@@ -163,13 +163,13 @@ function clearView() {
 $('btnClear').onclick = clearView;
 // PLY: sichtbare Punkte (Höhenschnitt beachtet) direkt aus dem Viewer
 $('btnPly').onclick = () => {
-  const v = v3d.visiblePoints();
+  const v = thinPoints(v3d.visiblePoints(), +$('thinCell').value);
   if (!v.total) { toast('Keine Punkte in der 3D-Ansicht.'); return; }
   exportPLY(v.xyz, v.inten, v.total);
 };
 
 $('btnLas').onclick = () => {
-  const v = v3d.visiblePoints();
+  const v = thinPoints(v3d.visiblePoints(), +$('thinCell').value);
   if (!v.total) { toast('Keine Punkte in der 3D-Ansicht.'); return; }
   exportLAS(v.xyz, v.inten, v.total, `${currentScanId || 'pilidar'}.las`);
 };
@@ -212,6 +212,7 @@ function floorCompute(opts) {
     $('floorLo').value = floorRes.zLo.toFixed(2); $('floorHi').value = floorRes.zHi.toFixed(2);
     $('floorInfo').textContent = `Decke bei ${floorRes.ceiling.toFixed(2)} m · Streifen ${floorRes.zLo.toFixed(2)}…${floorRes.zHi.toFixed(2)} m · ` +
       `${floorRes.segs.length} Wandstücke, ${floorRes.wallLength.toFixed(1)} m Wandlänge · ${Math.round(performance.now() - t0)} ms. ` +
+      FloorPlan.describe(floorRes).join(' · ') + '. ' +
       `Nur senkrechte Flächen (Dachschrägen/Möbel ausgefiltert). Roter Punkt = Scannerstandort.`;
   } catch (e) { toast('Grundriss: ' + e.message); }
 }
@@ -263,6 +264,16 @@ async function poll() {
     const s = await (await rawFetch('/api/status')).json();
     const b = $('state'); b.textContent = s.state;
     $('posBanner').classList.toggle('hidden', !s.position_lost);
+    const running = s.state === 'scanning' || s.state === 'calibrating';
+    $('progress').classList.toggle('hidden', !running && s.state !== 'processing');
+    if (running && s.scan_angle) {
+      const pct = Math.max(0, Math.min(1, s.angle / s.scan_angle));
+      const rest = Math.max(0, (s.scan_angle - s.angle) / (s.speed_dps || 1));
+      $('progressBar').style.width = `${(pct * 100).toFixed(0)}%`;
+      $('progressTxt').textContent = `${(pct * 100).toFixed(0)} % · noch ca. ${Math.ceil(rest)} s`;
+    } else if (s.state === 'processing') {
+      $('progressBar').style.width = '100%'; $('progressTxt').textContent = 'Auswertung …';
+    }
     // Scan-Liste nachladen, sobald ein Lauf (Scan/Kalibrierung) fertig ist
     if (s.state === 'idle' && lastState && lastState !== 'idle' && lastState !== 'lidar_only') refreshScans();
     lastState = s.state;
@@ -312,6 +323,7 @@ async function refreshScans() {
         <span><span class="dot ${qa}"></span><b>${s.id}</b></span>
         <span style="display:flex;gap:6px;align-items:center">
           <button class="btn-view3d" data-id="${s.id}" title="In 3D anzeigen">&#128065; 3D</button>
+          <button class="btn-add3d" data-id="${s.id}" title="Zur 3D-Ansicht hinzufügen (überlagern)">+</button>
           <button class="btn-calscan" data-id="${s.id}" title="Offsets aus diesem Scan kalibrieren (ohne Motor)">&#9881;</button>
           <a href="/api/scans/${s.id}/download">ZIP</a>
           <button class="btn-del" data-id="${s.id}">&#128465;</button>
@@ -319,6 +331,7 @@ async function refreshScans() {
       </div>
       <div style="color:#7d8794;margin-top:2px">Modus ${s.mode || '?'} &middot; ${(s.n_points || 0).toLocaleString('de-DE')} Pkt &middot; QA ${qa || '–'}${
         s.qa && typeof s.qa.loop_closure_mm === 'number' ? ` &middot; Überlappung ${s.qa.loop_closure_mm.toFixed(0)} mm` : ''}${
+        typeof s.size_mb === 'number' ? ` &middot; ${s.size_mb} MB` : ''}${
         s.qa && s.qa.messages && s.qa.messages.length ? `<br><span style="color:#e0b050">${s.qa.messages.join('; ')}</span>` : ''}</div>
       <div class="ann-row">
         <input class="ann-input" type="text" placeholder="Anmerkung…" value="${ann}" />
@@ -328,6 +341,9 @@ async function refreshScans() {
   }
   ul.querySelectorAll('.btn-view3d').forEach(btn => {
     btn.onclick = () => loadScanInto3D(btn.dataset.id);
+  });
+  ul.querySelectorAll('.btn-add3d').forEach(btn => {
+    btn.onclick = () => loadScanInto3D(btn.dataset.id, true);
   });
   ul.querySelectorAll('.btn-calscan').forEach(btn => {
     btn.onclick = () => calibrateFromScan(btn.dataset.id);
@@ -351,9 +367,13 @@ async function refreshScans() {
 }
 // Gespeicherten Scan in die 3D-Ansicht laden
 let currentScanId = null;   // zuletzt in 3D geladener Scan (für Dateinamen)
-async function loadScanInto3D(scanId) {
+let loadedScans = [];       // überlagerte Scans (Index = Farbe im Modus „Scan-Nummer“)
+async function loadScanInto3D(scanId, add = false) {
   currentScanId = scanId;
-  clearView();
+  if (!add || !loadedScans.length) { clearView(); loadedScans = []; }
+  const src = loadedScans.length;
+  loadedScans.push(scanId);
+  if (add) toast(`Scan ${scanId} überlagert (Nr. ${src}). Farbe „Scan-Nummer“ trennt die Scans.`, 'info');
   // auf 3D-Ansicht umschalten
   const radio3d = document.querySelector('input[name="view"][value="3d"]');
   radio3d.checked = true;
@@ -364,7 +384,7 @@ async function loadScanInto3D(scanId) {
     const raw = await rawFetch(`/api/scans/${scanId}/raw`);
     if (raw.ok) {                                  // Browser rechnet aus den Rohdaten
       const buf = await raw.arrayBuffer();
-      worker.postMessage({ type: 'rawScan', buf, scanId }, [buf]);
+      worker.postMessage({ type: 'rawScan', buf, scanId, src }, [buf]);
       return;
     }
     // Fallback: auf dem Pi gespeicherte Punktwolke (ältere Scans ohne Rohdaten)
@@ -405,6 +425,18 @@ async function calibrateFromScan(scanId) {
     toast('Offsets übernommen – gespeicherte Scans werden beim Öffnen neu gerechnet.', 'info');
   }
 }
+
+async function runSelftest(quiet) {
+  try {
+    const r = await (await rawFetch('/api/selftest')).json();
+    const bad = r.checks.filter(c => !c.ok);
+    if (!quiet || bad.length)
+      toast(bad.length ? 'Selbsttest: ' + bad.map(c => `${c.name}: ${c.detail}`).join(' · ')
+                       : 'Selbsttest: alles in Ordnung', bad.some(c => c.level === 'error') ? 'error' : 'info');
+  } catch (e) { /* offline */ }
+}
+$('btnSelftest').onclick = () => runSelftest(false);
+setTimeout(() => runSelftest(true), 1500);   // beim Laden nur Probleme melden
 
 $('btnRefresh').onclick = refreshScans;
 $('btnConfirmHome').onclick = async () => {

@@ -159,6 +159,74 @@ const FloorPlan = (() => {
     return segs;
   }
 
+  /* Bodenhöhe: dichteste Höhe in der unteren Hälfte (nur wenn genug Bodenpunkte sichtbar) */
+  function estimateFloor(chunks, bbox) {
+    const lo = bbox.min[2], hi = (bbox.min[2] + bbox.max[2]) / 2, bin = 0.02;
+    const n = Math.max(1, Math.ceil((hi - lo) / bin) + 1), h = new Uint32Array(n);
+    let tot = 0;
+    for (const c of chunks) for (let i = 2; i < c.pos.length; i += 3) {
+      const z = c.pos[i]; if (z <= hi) { h[Math.min(n - 1, Math.floor((z - lo) / bin))]++; tot++; }
+    }
+    let best = 0; for (let i = 1; i < n; i++) if (h[i] > h[best]) best = i;
+    return h[best] > Math.max(2000, tot * 0.02) ? lo + (best + 0.5) * bin : null;
+  }
+
+  /* Raummaße entlang der Hauptrichtungen, Fläche (Flutfüllung vom Scanner aus), Raumhöhe */
+  function metrics(res, chunks, bbox) {
+    const out = {};
+    // Hauptrichtung aus den Wandstücken (gewichtet mit Länge, modulo 90°)
+    let sx = 0, sy = 0;
+    for (const s of res.segs) {
+      const L = Math.hypot(s[2] - s[0], s[3] - s[1]), a = Math.atan2(s[3] - s[1], s[2] - s[0]) * 4;
+      sx += Math.cos(a) * L; sy += Math.sin(a) * L;
+    }
+    const base = Math.atan2(sy, sx) / 4, cb = Math.cos(base), sb = Math.sin(base);
+    const us = [], vs = [];
+    for (const p of res.occ) { us.push(p[0] * cb + p[1] * sb); vs.push(-p[0] * sb + p[1] * cb); }
+    const pct = (arr, q) => { const a = arr.slice().sort((x, y) => x - y); return a[Math.floor(q * (a.length - 1))]; };
+    if (us.length > 10) {
+      out.lengthA = pct(us, 0.99) - pct(us, 0.01);
+      out.lengthB = pct(vs, 0.99) - pct(vs, 0.01);
+      out.baseDeg = base * 180 / Math.PI;
+    }
+    // Fläche: Raster 5 cm, Wände (verbreitert) sperren, vom Scanner aus füllen
+    const g = 0.05, b = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    for (const p of res.occ) { b.x0 = Math.min(b.x0, p[0]); b.x1 = Math.max(b.x1, p[0]); b.y0 = Math.min(b.y0, p[1]); b.y1 = Math.max(b.y1, p[1]); }
+    if (isFinite(b.x0)) {
+      b.x0 = Math.min(b.x0, 0) - g; b.y0 = Math.min(b.y0, 0) - g; b.x1 = Math.max(b.x1, 0) + g; b.y1 = Math.max(b.y1, 0) + g;
+      const W = Math.ceil((b.x1 - b.x0) / g) + 1, H = Math.ceil((b.y1 - b.y0) / g) + 1;
+      if (W * H < 4e6) {
+        const wall = new Uint8Array(W * H), seen = new Uint8Array(W * H);
+        const mark = (x, y) => {                                 // Wandpunkt, 1 Zelle verbreitert
+          const ix = Math.floor((x - b.x0) / g), iy = Math.floor((y - b.y0) / g);
+          for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+            const xx = ix + dx, yy = iy + dy; if (xx >= 0 && yy >= 0 && xx < W && yy < H) wall[yy * W + xx] = 1;
+          }
+        };
+        for (const p of res.occ) mark(p[0], p[1]);
+        for (const s of res.segs) {                              // Wandlinien schließen Lücken im Raster
+          const L = Math.hypot(s[2] - s[0], s[3] - s[1]), k = Math.ceil(L / (g / 2));
+          for (let i = 0; i <= k; i++) mark(s[0] + (s[2] - s[0]) * i / k, s[1] + (s[3] - s[1]) * i / k);
+        }
+        let sx0 = Math.floor((0 - b.x0) / g), sy0 = Math.floor((0 - b.y0) / g);
+        const stack = [sy0 * W + sx0]; let cnt = 0, open = false;
+        if (wall[stack[0]]) stack.length = 0;
+        while (stack.length) {
+          const i = stack.pop(); if (seen[i] || wall[i]) continue;
+          seen[i] = 1; cnt++;
+          const x = i % W, y = (i - x) / W;
+          if (x === 0 || y === 0 || x === W - 1 || y === H - 1) { open = true; continue; }
+          stack.push(i - 1, i + 1, i - W, i + W);
+        }
+        out.area = cnt * g * g; out.areaOpen = open;
+      }
+    }
+    // Raumhöhe
+    const floor = estimateFloor(chunks, bbox);
+    out.floor = floor; out.height = floor === null ? null : res.ceiling - floor;
+    return out;
+  }
+
   /* Gesamtablauf. opts: {zLo, zHi} (absolut, m) oder automatisch unter der Decke */
   function compute(viewer, opts = {}) {
     const chunks = viewer.chunks, bbox = viewer.bbox;
@@ -173,7 +241,18 @@ const FloorPlan = (() => {
     if (opts.orthogonal !== false) lines = orthogonalize(lines);
     const segs = segments(lines);
     let length = 0; for (const s of segs) length += Math.hypot(s[2] - s[0], s[3] - s[1]);
-    return { segs, occ, zLo, zHi, ceiling, cell, wallLength: length };
+    const res = { segs, occ, zLo, zHi, ceiling, cell, wallLength: length };
+    res.m = metrics(res, chunks, bbox);
+    return res;
+  }
+
+  /* Maße als Text (für Anzeige und DXF) */
+  function describe(res) {
+    const m = res.m || {}, t = [];
+    if (m.lengthA) t.push(`Raum ca. ${Math.max(m.lengthA, m.lengthB).toFixed(2)} × ${Math.min(m.lengthA, m.lengthB).toFixed(2)} m`);
+    if (m.area) t.push(`Fläche ${m.areaOpen ? '≥ ' : 'ca. '}${m.area.toFixed(1)} m²${m.areaOpen ? ' (Raum nicht geschlossen)' : ''}`);
+    t.push(m.height ? `Raumhöhe ca. ${m.height.toFixed(2)} m` : 'Raumhöhe: Boden nicht sichtbar');
+    return t;
   }
 
   /* DXF (R12, ASCII): Schicht WAENDE mit LINE-Elementen, Einheit Meter; optional Rasterpunkte */
@@ -182,12 +261,17 @@ const FloorPlan = (() => {
                  '0', 'SECTION', '2', 'TABLES', '0', 'TABLE', '2', 'LAYER', '70', '2',
                  '0', 'LAYER', '2', 'WAENDE', '70', '0', '62', '7', '6', 'CONTINUOUS',
                  '0', 'LAYER', '2', 'SCANPUNKTE', '70', '0', '62', '8', '6', 'CONTINUOUS',
+                 '0', 'LAYER', '2', 'MASSE', '70', '0', '62', '1', '6', 'CONTINUOUS',
                  '0', 'ENDTAB', '0', 'ENDSEC', '0', 'SECTION', '2', 'ENTITIES'];
     for (const s of res.segs)
       out.push('0', 'LINE', '8', 'WAENDE', '10', s[0].toFixed(4), '20', s[1].toFixed(4), '30', '0.0',
                '11', s[2].toFixed(4), '21', s[3].toFixed(4), '31', '0.0');
     if (withPoints) for (const p of res.occ)
       out.push('0', 'POINT', '8', 'SCANPUNKTE', '10', p[0].toFixed(3), '20', p[1].toFixed(3), '30', '0.0');
+    const bb = bounds(res);                                   // Beschriftung unter dem Plan
+    describe(res).forEach((line, k) => out.push('0', 'TEXT', '8', 'MASSE', '10', bb.x0.toFixed(3),
+      '20', (bb.y0 - 0.25 - k * 0.15).toFixed(3), '30', '0.0', '40', '0.10', '1', line.replace(/[²×≥]/g, c => ({ '²': '2', '×': 'x', '≥': '>=' })[c])));
+    out.push('0', 'POINT', '8', 'MASSE', '10', '0.0', '20', '0.0', '30', '0.0');   // Scannerstandort
     out.push('0', 'ENDSEC', '0', 'EOF');
     return out.join('\r\n') + '\r\n';
   }
@@ -233,7 +317,7 @@ const FloorPlan = (() => {
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
 
-  return { compute, toDXF, toSVG, draw, download, estimateCeiling };
+  return { compute, toDXF, toSVG, draw, download, estimateCeiling, describe };
 })();
 
 window.FloorPlan = FloorPlan;

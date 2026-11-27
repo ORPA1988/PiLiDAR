@@ -36,6 +36,10 @@ class ScanStore:
                 continue
             meta = d / "meta.json"
             info = {"id": d.name}
+            try:   # belegter Platz (für die Speicherverwaltung in der Oberfläche)
+                info["size_mb"] = round(sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) / 1e6, 1)
+            except OSError:
+                pass
             if meta.exists():
                 try:
                     info.update(json.loads(meta.read_text(encoding="utf-8")))
