@@ -45,6 +45,12 @@ void main(){
   if (vCut > 0.5) discard;
   if (uMode == 3) { gl_FragColor = vec4(0.55, 0.85, 0.65, 1.0); return; }
   if (uMode == 0) { float g = clamp(vVal, 0.05, 1.0); gl_FragColor = vec4(g * 0.5, g, g * 0.7, 1.0); return; }
+  if (uMode == 5) {                                 // feste, gut unterscheidbare Farben je Scan
+    float k = mod(floor(vVal + 0.5), 6.0);
+    vec3 c = k < 0.5 ? vec3(1.0, 0.6, 0.1) : k < 1.5 ? vec3(0.2, 0.8, 1.0) : k < 2.5 ? vec3(0.95, 0.3, 0.8)
+           : k < 3.5 ? vec3(0.6, 0.95, 0.3) : k < 4.5 ? vec3(0.95, 0.95, 0.95) : vec3(0.4, 0.45, 1.0);
+    gl_FragColor = vec4(c, 1.0); return;
+  }
   gl_FragColor = vec4(turbo(vVal), 1.0);
 }`;
 
@@ -353,7 +359,7 @@ class Viewer3D {
     if (!b) return [0, 1];
     if (this.colorMode === 1) return [Math.max(b.min[2], this.clip[0]), Math.min(b.max[2], this.clip[1])];
     if (this.colorMode === 4) return [0, Math.max(this.zaMax, 1)];
-    if (this.colorMode === 5) return [0, Math.max(this.nSources - 1, 1)];
+    if (this.colorMode === 5) return [0, 1];                      // Shader nutzt die Nummer direkt
     return [0, Math.min(Math.sqrt(b.rmax), 10)];
   }
 
@@ -362,7 +368,11 @@ class Viewer3D {
     const names = ['Intensität', 'Höhe [m]', 'Entfernung [m]', 'einfarbig', 'Drehwinkel [°]', 'Scan Nr.'];
     const r = this._range();
     const fmt = v => (this.colorMode === 0 || this.colorMode >= 4) ? v.toFixed(0) : v.toFixed(2);
-    this._legendEl.innerHTML = this.colorMode === 3 || this.colorMode === 0 ? `<span>${names[this.colorMode]}</span>`
+    const pal = ['#ff9a1a', '#33ccff', '#f24dcc', '#99f24d', '#f2f2f2', '#6673ff'];
+    if (this.colorMode === 5) {
+      this._legendEl.innerHTML = `<span>${names[5]}</span> ` + Array.from({ length: this.nSources }, (_, k) =>
+        `<span style="color:${pal[k % 6]}">&#9632; ${k}</span>`).join(' ');
+    } else this._legendEl.innerHTML = this.colorMode === 3 || this.colorMode === 0 ? `<span>${names[this.colorMode]}</span>`
       : `<span>${names[this.colorMode]}</span><div class="bar"></div><span class="lo">${fmt(r[0])}</span><span class="hi">${fmt(r[1])}</span>`;
     const b = this.bbox;
     this._scaleEl.textContent = b

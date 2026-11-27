@@ -88,6 +88,13 @@ Fortschritt mit Restzeit, Selbsttest (`GET /api/selftest`).
 **Grundriss** (`frontend/js/floorplan.js`): nur senkrechte Flächen, Wände per RANSAC, Raummaße,
 Fläche, Höhe; DXF (Schichten WAENDE, SCANPUNKTE, MASSE; Meter) und SVG 1:10.
 
+**Mehrere Scans** (`frontend/js/registration.js`, eigener Worker): weitere Scans mit „+“ dazuladen,
+„Scans ausrichten“ legt sie an den ersten (Drehung um z + Verschiebung; Scanner waagerecht). Grob:
+Wandzellen, FFT-Kreuzkorrelation für alle Drehwinkel (2°); fein: ICP mit Fangradius 0,5 → 0,08 m.
+Güte: Überdeckung (Punkte mit Nachbar < 10 cm) und Abweichung. Als **Projekt** auf dem Pi speichern
+(`/api/projects`, Datei `projects/<name>.json`: Scan-IDs + Lage); Export und Grundriss nutzen die
+ausgerichtete Wolke, der Grundriss zeigt alle Scannerstandorte.
+
 **Bedienfehler** kommen als HTTP 409 mit `{"error": "…"}` und erscheinen unten rechts.
 
 **Frontend-Updates:** Versionskennung `?v=…` in `frontend/index.html` und `ASSET_VERSION` in
