@@ -233,6 +233,61 @@ const FloorPlan = (() => {
     return out;
   }
 
+  /* Geschlossener Umriss des vom Standort sichtbaren Raums.
+   * Strahlen vom Scannerstandort (1°-Schritte) treffen jeweils das nächste Wandstück (>= 0,6 m).
+   * Je Wandstück der getroffene Abschnitt (gemessen); Nachbarn werden an der Ecke verlängert,
+   * wenn ihr Schnittpunkt nah liegt, sonst gerade verbunden (ergänzt, gestrichelt).
+   * Liefert {pts: [[x, y, gemessenBisZumNächsten]], area, perimeter, added} oder null. */
+  function outline(res) {
+    if (!res.stations || res.stations.length !== 1) return null;
+    const st = res.stations[0];
+    const segs = res.segs.filter(s => Math.hypot(s[2] - s[0], s[3] - s[1]) >= 0.6);
+    if (segs.length < 2) return null;
+    const hits = [];
+    for (let a = 0; a < 360; a++) {
+      const dx = Math.cos(a * Math.PI / 180), dy = Math.sin(a * Math.PI / 180);
+      let best = null;
+      segs.forEach((s, i) => {
+        const ex = s[2] - s[0], ey = s[3] - s[1], den = dx * ey - dy * ex;
+        if (Math.abs(den) < 1e-9) return;
+        const wx = s[0] - st[0], wy = s[1] - st[1];
+        const t = (wx * ey - wy * ex) / den, u = (wx * dy - wy * dx) / den;
+        if (t > 0.05 && u >= 0 && u <= 1 && (!best || t < best.t)) best = { t, seg: i, x: st[0] + t * dx, y: st[1] + t * dy };
+      });
+      hits.push(best);
+    }
+    const runs = [];
+    for (const h of hits) {
+      if (!h) continue;
+      const last = runs[runs.length - 1];
+      if (last && last.seg === h.seg) last.last = h; else runs.push({ seg: h.seg, first: h, last: h });
+    }
+    if (runs.length > 1 && runs[0].seg === runs[runs.length - 1].seg) { runs[0].first = runs[runs.length - 1].first; runs.pop(); }
+    if (runs.length < 2) return null;
+    const pts = [];
+    runs.forEach((r, k) => {
+      const nx = runs[(k + 1) % runs.length], a = segs[r.seg], b = segs[nx.seg];
+      pts.push([r.first.x, r.first.y, true]);
+      // Ecke: Schnittpunkt der beiden Wandgeraden
+      const ax = a[2] - a[0], ay = a[3] - a[1], bx = b[2] - b[0], by = b[3] - b[1], den = ax * by - ay * bx;
+      let corner = null;
+      if (Math.abs(den) > 0.2 * Math.hypot(ax, ay) * Math.hypot(bx, by)) {
+        const t = ((b[0] - a[0]) * by - (b[1] - a[1]) * bx) / den;
+        corner = [a[0] + t * ax, a[1] + t * ay];
+        if (Math.hypot(corner[0] - r.last.x, corner[1] - r.last.y) > 0.8 ||
+            Math.hypot(corner[0] - nx.first.x, corner[1] - nx.first.y) > 0.8) corner = null;
+      }
+      if (corner) { pts.push([r.last.x, r.last.y, true]); pts.push([corner[0], corner[1], true]); }
+      else pts.push([r.last.x, r.last.y, false]);              // Lücke: gerade ergänzt
+    });
+    let area = 0, per = 0, added = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i], q = pts[(i + 1) % pts.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      area += p[0] * q[1] - q[0] * p[1]; per += L; if (!p[2]) added += L;
+    }
+    return { pts, area: Math.abs(area) / 2, perimeter: per, added };
+  }
+
   /* Gesamtablauf. opts: {zLo, zHi} (absolut, m) oder automatisch unter der Decke */
   function compute(viewer, opts = {}) {
     const chunks = viewer.chunks, bbox = viewer.bbox;
@@ -250,6 +305,7 @@ const FloorPlan = (() => {
     const stations = opts.stations && opts.stations.length ? opts.stations : [[0, 0]];
     const res = { segs, occ, zLo, zHi, ceiling, cell, wallLength: length, stations };
     res.m = metrics(res, chunks, bbox);
+    res.outline = outline(res);
     return res;
   }
 
@@ -258,6 +314,8 @@ const FloorPlan = (() => {
     const m = res.m || {}, t = [];
     if (m.lengthA) t.push(`Raum ca. ${Math.max(m.lengthA, m.lengthB).toFixed(2)} × ${Math.min(m.lengthA, m.lengthB).toFixed(2)} m`);
     if (m.area) t.push(`Fläche ${m.areaOpen ? '≥ ' : 'ca. '}${m.area.toFixed(1)} m²${m.areaOpen ? ' (Raum nicht geschlossen)' : ''}`);
+    if (res.outline) t.push(`Umriss (vom Standort sichtbar): ${res.outline.area.toFixed(1)} m², Umfang ${res.outline.perimeter.toFixed(1)} m, ` +
+      `davon ${res.outline.added.toFixed(1)} m ergänzt`);
     t.push(m.height ? `Raumhöhe (tiefste Fläche bis Decke) ca. ${m.height.toFixed(2)} m` : 'Raumhöhe: Boden nicht sichtbar');
     return t;
   }
@@ -269,12 +327,18 @@ const FloorPlan = (() => {
                  '0', 'LAYER', '2', 'WAENDE', '70', '0', '62', '7', '6', 'CONTINUOUS',
                  '0', 'LAYER', '2', 'SCANPUNKTE', '70', '0', '62', '8', '6', 'CONTINUOUS',
                  '0', 'LAYER', '2', 'MASSE', '70', '0', '62', '1', '6', 'CONTINUOUS',
+                 '0', 'LAYER', '2', 'UMRISS', '70', '0', '62', '5', '6', 'CONTINUOUS',
                  '0', 'ENDTAB', '0', 'ENDSEC', '0', 'SECTION', '2', 'ENTITIES'];
     for (const s of res.segs)
       out.push('0', 'LINE', '8', 'WAENDE', '10', s[0].toFixed(4), '20', s[1].toFixed(4), '30', '0.0',
                '11', s[2].toFixed(4), '21', s[3].toFixed(4), '31', '0.0');
     if (withPoints) for (const p of res.occ)
       out.push('0', 'POINT', '8', 'SCANPUNKTE', '10', p[0].toFixed(3), '20', p[1].toFixed(3), '30', '0.0');
+    if (res.outline) {                                        // geschlossener Umriss als Polylinie
+      out.push('0', 'POLYLINE', '8', 'UMRISS', '66', '1', '70', '1');
+      for (const p of res.outline.pts) out.push('0', 'VERTEX', '8', 'UMRISS', '10', p[0].toFixed(4), '20', p[1].toFixed(4), '30', '0.0');
+      out.push('0', 'SEQEND');
+    }
     const bb = bounds(res);                                   // Beschriftung unter dem Plan
     describe(res).forEach((line, k) => out.push('0', 'TEXT', '8', 'MASSE', '10', bb.x0.toFixed(3),
       '20', (bb.y0 - 0.25 - k * 0.15).toFixed(3), '30', '0.0', '40', '0.10', '1', line.replace(/[²×≥]/g, c => ({ '²': '2', '×': 'x', '≥': '>=' })[c])));
@@ -297,9 +361,11 @@ const FloorPlan = (() => {
     const X = x => ((x - b.x0 + m) * 1000).toFixed(1), Y = y => ((b.y1 + m - y) * 1000).toFixed(1);
     const pts = res.occ.map(p => `<rect x="${X(p[0])}" y="${Y(p[1])}" width="${res.cell * 1000}" height="${res.cell * 1000}"/>`).join('');
     const ln = res.segs.map(s => `<line x1="${X(s[0])}" y1="${Y(s[1])}" x2="${X(s[2])}" y2="${Y(s[3])}"/>`).join('');
+    const ol = res.outline ? `<polygon fill="none" stroke="#1565c0" stroke-width="8" stroke-dasharray="40 30" points="${
+      res.outline.pts.map(p => X(p[0]) + ',' + Y(p[1])).join(' ')}"/>` : '';
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${(W / 10).toFixed(0)}mm" height="${(H / 10).toFixed(0)}mm" ` +
       `viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}"><title>PiLiDAR Grundriss (Maßstab 1:10)</title>` +
-      `<g fill="#bbb">${pts}</g><g stroke="#000" stroke-width="15" stroke-linecap="round">${ln}</g></svg>`;
+      `<g fill="#bbb">${pts}</g>${ol}<g stroke="#000" stroke-width="15" stroke-linecap="round">${ln}</g></svg>`;
   }
 
   /* Vorschau auf ein Canvas zeichnen (Rasterpunkte grau, Wände schwarz, Maßstab) */
@@ -311,6 +377,15 @@ const FloorPlan = (() => {
     const X = x => 20 + (x - b.x0) * s, Y = y => H - 20 - (y - b.y0) * s;
     ctx.fillStyle = '#c8c8c8';
     for (const p of res.occ) ctx.fillRect(X(p[0]), Y(p[1]), Math.max(1, res.cell * s), Math.max(1, res.cell * s));
+    if (res.outline && res.showOutline !== false) {           // Umriss: gemessen durchgezogen, ergänzt gestrichelt
+      const o = res.outline.pts; ctx.strokeStyle = '#1565c0'; ctx.lineWidth = 1.5;
+      for (let i = 0; i < o.length; i++) {
+        const p = o[i], q = o[(i + 1) % o.length];
+        ctx.setLineDash(p[2] ? [] : [6, 5]);
+        ctx.beginPath(); ctx.moveTo(X(p[0]), Y(p[1])); ctx.lineTo(X(q[0]), Y(q[1])); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
     ctx.strokeStyle = '#000'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
     for (const g of res.segs) { ctx.beginPath(); ctx.moveTo(X(g[0]), Y(g[1])); ctx.lineTo(X(g[2]), Y(g[3])); ctx.stroke(); }
     ctx.fillStyle = '#c0392b';                                // Scannerstandorte

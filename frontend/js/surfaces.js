@@ -83,6 +83,20 @@ const Surfaces = (() => {
       if (near(lo) > horizZ.length * 0.03) floorZ = lo;
       if (near(hi) > horizZ.length * 0.03 && hi - lo > 1.0) ceilZ = hi;
     }
+    // Schräge nur, wenn genug Nachbarwürfel ebenfalls schräg sind – einzelne Schräg-Würfel
+    // entstehen an Kanten (Decke/Wand), wo zwei Flächen in einem Würfel liegen.
+    const lone = [];
+    for (const [k, v] of info) {
+      if (v.cls !== 4) continue;
+      let nb = 0;
+      for (let dz = -1; dz <= 1; dz++) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy && !dz) continue;
+        const o = info.get(k + (dz * K + dy) * K + dx);
+        if (o && o.cls === 4) nb++;
+      }
+      if (nb < 5) lone.push(v);
+    }
+    for (const v of lone) v.cls = 0;
     const area = [0, 0, 0, 0, 0, 0];
     for (const v of info.values()) {
       if (v.cls === 5) {
