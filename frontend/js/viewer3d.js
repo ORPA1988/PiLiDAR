@@ -11,7 +11,7 @@
 const VERT = `
 attribute vec3 aPos; attribute float aInt;
 uniform mat4 uMVP; uniform float uSize;
-uniform int uMode; uniform vec2 uRange; uniform vec2 uClip;
+uniform mediump int uMode; uniform vec2 uRange; uniform vec2 uClip;
 varying float vVal; varying float vCut;
 void main(){
   gl_Position = uMVP * vec4(aPos, 1.0);
@@ -25,7 +25,7 @@ void main(){
 
 const FRAG = `
 precision mediump float;
-uniform int uMode;
+uniform mediump int uMode;              // gleiche Genauigkeit wie im Vertex-Shader (sonst Link-Fehler)
 varying float vVal; varying float vCut;
 vec3 turbo(float x){                                // Näherung der Farbskala „turbo“
   x = clamp(x, 0.0, 1.0);
