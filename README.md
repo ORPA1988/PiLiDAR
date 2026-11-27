@@ -88,6 +88,10 @@ Fortschritt mit Restzeit, Selbsttest (`GET /api/selftest`).
 **Grundriss** (`frontend/js/floorplan.js`): nur senkrechte Flächen, Wände per RANSAC, Raummaße,
 Fläche, Höhe; DXF (Schichten WAENDE, SCANPUNKTE, MASSE; Meter) und SVG 1:10.
 
+**Schnittansicht** (`frontend/js/section.js`): senkrechter Schnitt durch einen Punkt in wählbarer Richtung
+und Dicke (auch aus zwei Messpunkten oder an den Wänden ausgerichtet), Export DXF (Schicht SCHNITT), SVG 1:10, PNG.
+**Abweichung zwischen Scans** (Farbmodus): Abstand jedes Punkts zum jeweils anderen geladenen Scan, 0–10 cm.
+
 **Mehrere Scans** (`frontend/js/registration.js`, eigener Worker): weitere Scans mit „+“ dazuladen,
 „Scans ausrichten“ legt sie an den ersten (Drehung um z + Verschiebung; Scanner waagerecht). Grob:
 Wandzellen, FFT-Kreuzkorrelation für alle Drehwinkel (2°); fein: ICP mit Fangradius 0,5 → 0,08 m.
