@@ -76,7 +76,7 @@ const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] 
 class Viewer3D {
   constructor(canvas) {
     this.canvas = canvas;
-    const gl = this.gl = canvas.getContext('webgl', { antialias: true });
+    const gl = this.gl = canvas.getContext('webgl', { antialias: true, preserveDrawingBuffer: true });  // für PNG-Export
     if (!gl) { console.error('WebGL nicht verfügbar'); return; }
     this.prog = this._program(VERT, FRAG);
     this.aPos = gl.getAttribLocation(this.prog, 'aPos');

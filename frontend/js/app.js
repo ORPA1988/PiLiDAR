@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127g';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127h';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -166,6 +166,17 @@ $('btnPly').onclick = () => {
   const v = v3d.visiblePoints();
   if (!v.total) { toast('Keine Punkte in der 3D-Ansicht.'); return; }
   exportPLY(v.xyz, v.inten, v.total);
+};
+
+$('btnLas').onclick = () => {
+  const v = v3d.visiblePoints();
+  if (!v.total) { toast('Keine Punkte in der 3D-Ansicht.'); return; }
+  exportLAS(v.xyz, v.inten, v.total, `${currentScanId || 'pilidar'}.las`);
+};
+$('btnPng').onclick = () => {
+  const a = document.createElement('a');
+  a.href = $('view3d').toDataURL('image/png');
+  a.download = `${currentScanId || 'pilidar'}_ansicht.png`; a.click();
 };
 
 // --- 3D-Darstellung ----------------------------------------------------
