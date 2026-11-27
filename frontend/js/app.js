@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127w';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127x';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -42,6 +42,7 @@ const edgeFilterOn = () => { const e = document.getElementById('edgeChk'); retur
 let loadedScans = [];   // überlagerte Scans (Index = src = Farbe im Modus „Scan-Nummer“)
 let poses = [];         // Lage je Scan: {yaw [rad], tx, ty, tz [m]}  p' = Rz(yaw)·p + t
 let alignQ = [];        // Güte der Ausrichtung je Scan {overlap, rmse}
+let seamView = null;    // Naht-Ansicht aktiv: {id, buf}
 const rawWaiters = new Map();   // src -> resolve, wenn der Worker einen Scan fertig gerechnet hat
 
 // Geometrie-Parameter für den Worker aus der aktuellen Konfiguration
@@ -50,7 +51,8 @@ async function refreshWorkerCfg() {
     const c = await (await rawFetch('/api/config')).json();
     worker.postMessage({ type: 'init', angle_offset: c.LIDAR.ANGLE_OFFSET,
       model_y: c.GEOMETRY.MODEL_Y_OFFSET, model_z: c.GEOMETRY.MODEL_Z_OFFSET,
-      dist_min: c.LIDAR.DISTANCE_MIN_MM, dist_max: c.LIDAR.DISTANCE_MAX_MM, edge_filter: edgeFilterOn() });
+      dist_min: c.LIDAR.DISTANCE_MIN_MM, dist_max: c.LIDAR.DISTANCE_MAX_MM, edge_filter: edgeFilterOn(),
+      z_scale: c.GEOMETRY.Z_SCALE ?? 1 });
   } catch (e) { /* offline – Init kommt mit dem WebSocket */ }
 }
 refreshWorkerCfg();   // vertikale Winkelauflösung [°], live aus Frames gemessen
@@ -111,7 +113,7 @@ function connectWS() {
     for (let f = 0; f < n; f++)                   // 2D: Nachleuchten je Winkelsegment
       v2d.addFrame(a.subarray(f * 12, f * 12 + 12), d.subarray(f * 12, f * 12 + 12));
     // gespeicherte Scans in 3D: Live-Punkte nicht hineinmischen (erst „Leeren“ zeigt wieder live)
-    if (!loadedScans.length) worker.postMessage({ type: 'batch', buf }, [buf]);
+    if (!loadedScans.length && !seamView) worker.postMessage({ type: 'batch', buf }, [buf]);
   };
   ws.onclose = () => setTimeout(connectWS, 1500);
 }
@@ -168,6 +170,7 @@ function clearView() {
   v2d.clear(); v3d.clear(); worker.postMessage({ type: 'clear' });
   totalPoints = 0; $('stPts').textContent = '0';
   loadedScans = []; poses = []; alignQ = []; $('alignInfo').textContent = '';
+  seamView = null;
   if ($('manualBox')) $('manualBox').classList.add('hidden');
 }
 $('btnClear').onclick = clearView;
@@ -650,6 +653,7 @@ async function fillOffsetBox() {
     $('offAng').value = (+c.LIDAR.ANGLE_OFFSET).toFixed(3);
     $('offY').value = (+c.GEOMETRY.MODEL_Y_OFFSET).toFixed(1);
     $('offZ').value = (+c.GEOMETRY.MODEL_Z_OFFSET).toFixed(1);
+    $('offK').value = (+(c.GEOMETRY.Z_SCALE ?? 1)).toFixed(4);
     const scans = await (await rawFetch('/api/scans')).json();
     const sel = $('offScan'), cur = sel.value; sel.innerHTML = '';
     for (const s of scans.filter(s => (s.scan_angle || 0) > 180 || s.mode === 'B')) {
@@ -659,7 +663,39 @@ async function fillOffsetBox() {
   } catch (e) { /* offline */ }
 }
 $('offBox').addEventListener('toggle', () => { if ($('offBox').open) fillOffsetBox(); });
-const offVals = () => ({ angle_offset: +$('offAng').value, model_y_offset: +$('offY').value || 0, model_z_offset: +$('offZ').value || 0 });
+const offVals = () => ({ angle_offset: +$('offAng').value, model_y_offset: +$('offY').value || 0,
+                         model_z_offset: +$('offZ').value || 0, z_scale: +$('offK').value || 1 });
+// Naht-Ansicht: Anfang (orange) und Ende (türkis) des Scans mit den Werten aus den Feldern
+async function showSeam(reuse) {
+  const id = $('offScan').value; if (!id) { toast('Kein Scan mit Überlappung vorhanden.'); return; }
+  const meta = (await (await rawFetch('/api/scans')).json()).find(s => s.id === id) || {};
+  const sa = meta.scan_angle || 184, ov = meta.overlap_deg || 4;
+  let buf = reuse && seamView && seamView.id === id ? seamView.buf : null;
+  if (!buf) {
+    const r = await rawFetch(`/api/scans/${id}/raw`);
+    if (!r.ok) { toast('Keine Rohdaten für diesen Scan.'); return; }
+    buf = await r.arrayBuffer();
+  }
+  const keepView = reuse && seamView;
+  clearView();
+  seamView = { id, buf };
+  const v = offVals();
+  worker.postMessage({ type: 'init', angle_offset: v.angle_offset, model_y: v.model_y_offset,
+                       model_z: v.model_z_offset, z_scale: v.z_scale });
+  document.querySelector('input[name="view"][value="3d"]').checked = true; applyViewMode();
+  await new Promise(res => { rawWaiters.set(0, res);
+    worker.postMessage({ type: 'rawScan', buf: buf.slice(0), scanId: id, src: 0, seam: { ov, sa } }); });
+  $('colorMode').value = '5'; v3d.setColorMode(5);
+  if (!keepView) v3d.setView('top');
+  $('offOut').innerHTML = `Naht von ${id}: orange = Anfang (0…${ov}°), türkis = Ende (${sa - ov}…${sa}°). ` +
+    'Werte ändern, die Ansicht rechnet sofort neu; passt es, „Übernehmen“. „Ansicht leeren“ beendet die Naht-Ansicht.';
+}
+let seamTimer = null;
+for (const id of ['offAng', 'offY', 'offZ', 'offK']) $(id).addEventListener('input', () => {
+  if (!seamView) return;
+  clearTimeout(seamTimer); seamTimer = setTimeout(() => showSeam(true), 350);
+});
+$('btnSeam').onclick = () => showSeam(false);
 $('btnOffCheck').onclick = async () => {
   const id = $('offScan').value; if (!id) { toast('Kein Scan mit Überlappung vorhanden.'); return; }
   $('offOut').textContent = 'rechnet …';
@@ -674,7 +710,7 @@ $('btnOffCheck').onclick = async () => {
 $('btnOffApply').onclick = async () => {
   const v = offVals();
   if (!isFinite(v.angle_offset)) { toast('Winkel fehlt.'); return; }
-  if (!confirm(`Offsets übernehmen? Winkel ${v.angle_offset}°, y ${v.model_y_offset} mm, z ${v.model_z_offset} mm.\n` +
+  if (!confirm(`Offsets übernehmen? Winkel ${v.angle_offset}°, y ${v.model_y_offset} mm, z ${v.model_z_offset} mm, Drehfaktor ${v.z_scale}.\n` +
                'Gespeicherte Scans werden beim nächsten Öffnen damit gerechnet.')) return;
   const r = await api('/api/config/apply', { method: 'POST', body: JSON.stringify(v) });
   if (r.ok) { await refreshWorkerCfg(); toast('Offsets übernommen – Scan neu öffnen, um sie zu sehen.', 'info'); }

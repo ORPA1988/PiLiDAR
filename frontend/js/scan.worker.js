@@ -9,7 +9,7 @@
  */
 'use strict';
 
-let cfg = { angle_offset: 0, model_y: 0, model_z: 0, dist_min: 30, dist_max: 25000, edge_filter: false };
+let cfg = { angle_offset: 0, model_y: 0, model_z: 0, dist_min: 30, dist_max: 25000, edge_filter: false, z_scale: 1 };
 let edgeRemoved = 0;   // vom Kantenfilter verworfene Punkte (seit dem letzten Leeren)
 
 let allXYZ = [];   // Float32Array-Blöcke für den Export
@@ -29,7 +29,7 @@ function transformBlock(z, a, d, it, f0, n) {
   const za = new Float32Array(n * 12);              // Drehwinkel je Punkt (Diagnose-Farbe)
   let k = 0;
   for (let f = f0; f < f0 + n; f++) {
-    const zr = -z[f] * D2R, cz = Math.cos(zr), sz = Math.sin(zr);
+    const zr = -z[f] * cfg.z_scale * D2R, cz = Math.cos(zr), sz = Math.sin(zr);   // z_scale: Drehfaktor
     for (let j = f * 12; j < f * 12 + 12; j++) {
       const dd = d[j];
       if (dd < dmin || dd > dmax) continue;
@@ -81,7 +81,7 @@ function unpack(buf, withSpeed) {
 self.onmessage = (ev) => {
   const msg = ev.data;
   if (msg.type === 'init') {
-    for (const k of ['angle_offset', 'model_y', 'model_z', 'dist_min', 'dist_max'])
+    for (const k of ['angle_offset', 'model_y', 'model_z', 'dist_min', 'dist_max', 'z_scale'])
       if (typeof msg[k] === 'number') cfg[k] = msg[k];
     if (typeof msg.edge_filter === 'boolean') cfg.edge_filter = msg.edge_filter;
   } else if (msg.type === 'batch') {               // Live: Bündel vom WebSocket
@@ -90,6 +90,15 @@ self.onmessage = (ev) => {
   } else if (msg.type === 'rawScan') {             // gespeicherter Scan (Rohdaten)
     const r = unpack(msg.buf, false);
     const STEP = 20000;                            // Frames je Block
+    if (msg.seam) {                                // Naht-Ansicht: nur Anfang (src 0) und Ende (src 1)
+      const { ov, sa } = msg.seam;
+      let i1 = 0; while (i1 < r.n && r.z[i1] <= ov) i1++;
+      let i2 = 0; while (i2 < r.n && r.z[i2] < sa - ov) i2++;
+      emit(transformBlock(r.z, r.a, r.d, r.it, 0, i1), { scanId: msg.scanId, src: 0 });
+      emit(transformBlock(r.z, r.a, r.d, r.it, i2, r.n - i2), { scanId: msg.scanId, src: 1 });
+      self.postMessage({ type: 'rawDone', scanId: msg.scanId, src: msg.src || 0, total: totalPoints, edgeRemoved });
+      return;
+    }
     for (let f = 0; f < r.n; f += STEP) {
       const m = Math.min(STEP, r.n - f);
       emit(transformBlock(r.z, r.a, r.d, r.it, f, m), { progress: (f + m) / r.n, scanId: msg.scanId, src: msg.src || 0 });

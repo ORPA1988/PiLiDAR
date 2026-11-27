@@ -76,7 +76,7 @@ def select_frames(arrays: dict, z_lo: float, z_hi: float) -> dict:
 
 
 def build_pointcloud(frames, angle_offset: float, position_offset,
-                     dist_min_mm: float, dist_max_mm: float):
+                     dist_min_mm: float, dist_max_mm: float, z_scale: float = 1.0):
     """frames: Liste von dicts (angles[], distances[], intensities[], z_angle)
     oder dict von Arrays (siehe frames_to_arrays).
 
@@ -97,7 +97,7 @@ def build_pointcloud(frames, angle_offset: float, position_offset,
         return np.zeros((0, 3)), np.zeros((0,))
     pts = polar_to_plane(ang[m], dist[m]) @ _rot_matrix((0, 1, 0), angle_offset).T
     pts = pts + np.asarray(position_offset, dtype=float)
-    th = np.radians(-zz[m])
+    th = np.radians(-zz[m] * float(z_scale))     # Drehfaktor (Getriebe-Korrektur)
     c, s_ = np.cos(th), np.sin(th)
     out = np.column_stack((pts[:, 0] * c - pts[:, 1] * s_, pts[:, 0] * s_ + pts[:, 1] * c, pts[:, 2]))
     return out, inten[m]

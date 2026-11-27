@@ -300,6 +300,11 @@ async def api_config_apply(payload: dict):
         geom["MODEL_Y_OFFSET"] = float(payload["model_y_offset"])
     if "model_z_offset" in payload:
         geom["MODEL_Z_OFFSET"] = float(payload["model_z_offset"])
+    if "z_scale" in payload:   # Drehfaktor: wahrer Drehwinkel = gemeldeter · Z_SCALE
+        k = float(payload["z_scale"])
+        if not 0.8 <= k <= 1.2:
+            return JSONResponse(status_code=400, content={"ok": False, "error": "Drehfaktor außerhalb 0,8…1,2"})
+        geom["Z_SCALE"] = k
     if geom:
         config.update_section("GEOMETRY", geom)
     if "angle_offset" in payload:
