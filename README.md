@@ -99,6 +99,9 @@ Pfeilen/Drehknöpfen (1 cm/0,5° bis 20 cm/10°) oder Zahlen verschieben, dann �
 **Offsets von Hand** (Kalibrierung → „Offsets von Hand“): Winkel, y, z eingeben, mit „Mit Scan prüfen“
 die Überlappung (mm) an einem gespeicherten Scan berechnen (`/api/calibrate/check`), dann übernehmen.
 y ist der Abstand der Scan-Ebene von der Abtriebsachse, nicht von der Motorwelle.
+„Naht zeigen“ stellt nur Anfang (orange) und Ende (türkis) eines Scans dar und rechnet bei jeder
+Änderung von Winkel, y, z und **Drehfaktor** (`GEOMETRY.Z_SCALE`, wahrer Drehwinkel = gemeldet · Faktor)
+sofort neu – Kanten müssen deckungsgleich werden. y und Verdrehung sind aus den Daten allein kaum trennbar.
 **Kantenpunkte filtern** (3D-Darstellung): Punkte, die von beiden Winkel-Nachbarn weit abweichen, weglassen.
 
 **Bedienfehler** kommen als HTTP 409 mit `{"error": "…"}` und erscheinen unten rechts.
