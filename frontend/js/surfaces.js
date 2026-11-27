@@ -67,7 +67,7 @@ const Surfaces = (() => {
       const mx = a[1] / n, my = a[2] / n, mz = a[3] / n;
       const e = smallestEig([a[4] / n - mx * mx, a[5] / n - mx * my, a[6] / n - mx * mz,
                              a[7] / n - my * my, a[8] / n - my * mz, a[9] / n - mz * mz]);
-      const planar = e.val / e.sum < 0.03;
+      const planar = e.val / e.sum < 0.10;   // Messrauschen ~1 cm in 10-cm-Würfeln ergibt schon ~0,06
       const nz = Math.abs(e.n[2]);
       const area = cell * cell / Math.max(Math.abs(e.n[0]), Math.abs(e.n[1]), nz, 0.5);
       let cls = 0;
