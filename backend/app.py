@@ -143,6 +143,12 @@ async def api_scan_raw(scan_id: str):
     return Response(content=buf, media_type="application/octet-stream")
 
 
+@app.post("/api/calibrate/offset_from_scan")
+async def api_cal_offset_from_scan(payload: dict = Body(...)):
+    """Offset-Kalibrierung aus einem gespeicherten Scan (ohne Motor/LiDAR, ~3 s)."""
+    return await asyncio.to_thread(controller.offset_from_scan, str(payload.get("scan_id", "")))
+
+
 @app.post("/api/stepper/confirm_home")
 async def api_confirm_home():
     """Benutzer bestätigt: Drehkopf steht in der Ausgangslage (Position = 0)."""
@@ -256,8 +262,12 @@ async def ws_scan(ws: WebSocket):
         "dist_min": config.LIDAR["DISTANCE_MIN_MM"],
         "dist_max": config.LIDAR["DISTANCE_MAX_MM"],
     })
+    # Gegenstelle beobachten: schließt der Browser oder beim Beenden der Server die
+    # Verbindung, endet die Schleife sofort (sonst bricht uvicorn sie nach 3 s mit
+    # Fehlermeldung ab).
+    closed = asyncio.create_task(ws.receive())
     try:
-        while not _shutting_down.is_set():
+        while not _shutting_down.is_set() and not closed.done():
             try:
                 first = await asyncio.wait_for(q.get(), timeout=0.5)
             except asyncio.TimeoutError:
@@ -271,9 +281,10 @@ async def ws_scan(ws: WebSocket):
                     break
             await ws.send_bytes(_pack_frames(batch))
             await asyncio.sleep(0.03)   # ~30 Pakete/s genügen für die Anzeige
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, asyncio.CancelledError, RuntimeError):
         pass
     finally:
+        closed.cancel()
         controller.unsubscribe(q)
 
 

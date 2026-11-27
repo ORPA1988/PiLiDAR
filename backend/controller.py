@@ -105,6 +105,7 @@ class ScanController:
                 dir_invert=bool(s.get("DIR_INVERT", False)),
                 report_ms=s.get("REPORT_MS", 20),
                 exclude_ports=(config.LIDAR["PORT"],),
+                open_mode=s.get("OPEN_MODE", "reset"),
                 serial_factory=factory,
             )
         if backend != "gpio":
@@ -379,6 +380,26 @@ class ScanController:
             self._release_stepper()
             self.state = STATE_IDLE
         return result
+
+    def offset_from_scan(self, scan_id: str) -> dict:
+        """Offset-Kalibrierung aus den Rohdaten eines gespeicherten Scans – ohne Motor
+        und LiDAR (Modus-B-Scan mit Überlappung nötig)."""
+        arr = self.store.load_raw_arrays(scan_id)
+        if arr is None:
+            raise RuntimeError(f"Keine Rohdaten für Scan {scan_id}")
+        meta = next((m for m in self.store.list_scans() if m.get("id") == scan_id), {})
+        scan_angle = float(meta.get("scan_angle") or self.cfg.MODE_B_CONTINUOUS["SCAN_ANGLE"])
+        overlap = float(meta.get("overlap_deg") or self.cfg.MODE_B_CONTINUOUS["OVERLAP_DEG"])
+        if scan_angle < 180.0 + overlap - 1e-6 or overlap <= 0:
+            raise RuntimeError("Scan hat keine Überlappung (Modus B mit > 180° nötig)")
+        geom, lcfg = self.cfg.GEOMETRY, self.cfg.LIDAR
+        pos = (0.0, geom["MODEL_Y_OFFSET"], geom["MODEL_Z_OFFSET"])
+        res = calibrate_offset(arr, lcfg["ANGLE_OFFSET"], pos, lcfg["DISTANCE_MIN_MM"],
+                               lcfg["DISTANCE_MAX_MM"], scan_angle, overlap)
+        res["scan_id"] = scan_id
+        # Höhe (Z) ist über die Überlappung nicht bestimmbar -> nicht vorschlagen
+        res["model_z_offset"] = float(geom["MODEL_Z_OFFSET"])
+        return res
 
     def close(self) -> None:
         try:

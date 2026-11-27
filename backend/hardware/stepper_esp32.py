@@ -77,6 +77,7 @@ class Esp32Stepper:
         dir_invert: bool = False,
         report_ms: int = 20,
         exclude_ports: tuple[str, ...] = (),
+        open_mode: str = "reset",
         serial_factory: Optional[Callable[[], object]] = None,
         sync_window_s: float = 10.0,
     ):
@@ -90,6 +91,10 @@ class Esp32Stepper:
         self.dir_sign = -1 if dir_invert else 1
         self.report_ms = int(report_ms)
         self.exclude_ports = tuple(exclude_ports)
+        # "reset": DTR/RTS aus (bisher; ESP32-DevKit startet beim Öffnen neu -> Position unbekannt)
+        # "keep":  DTR/RTS beide an lassen (Auto-Reset-Schaltung bleibt in Ruhe). Vor dem Umstellen
+        #          mit scripts/esp32_reset_probe.py prüfen (Dienst vorher stoppen).
+        self.open_mode = str(open_mode).lower()
         self._serial_factory = serial_factory
         self.port: Optional[str] = None
 
@@ -159,9 +164,9 @@ class Esp32Stepper:
         s.port = port
         s.baudrate = self.baudrate
         s.timeout = 0.2
-        # DevKit-Autoreset: DTR/RTS nicht aktivieren
-        s.dtr = False
-        s.rts = False
+        keep = self.open_mode == "keep"
+        s.dtr = keep
+        s.rts = keep
         s.open()
         return s
 

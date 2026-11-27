@@ -54,6 +54,40 @@ tests/          Trockentests (CRC8, Decode, Mock-Scan) ohne Hardware
 config.json     zentrale Konfiguration (Single-Source-of-Truth)
 ```
 
+## Variante B: ESP32-Stepper und Betrieb (Stand 27.11.2026)
+
+**Datenfluss.** Der Pi speichert je Scan nur `raw/lidar_raw.npz` (z-Winkel, 12 Winkel/Distanzen/
+Intensitäten je Frame, Drehzahl, LiDAR-Zeitstempel, Empfangszeit) und eine `.ply`. Der Browser holt
+gespeicherte Scans als Rohdaten (`/api/scans/<id>/raw`) und rechnet die Punktwolke im Web-Worker
+mit den **aktuellen** Offsets – Kalibrierungen wirken damit auch auf alte Scans. Live-Daten kommen
+binär gebündelt über `/ws/scan` (Format in `backend/app.py`, `_pack_frames`).
+
+**Wichtige Einstellungen (`config.json`)**
+
+| Schlüssel | Bedeutung |
+|---|---|
+| `LIDAR.MOTOR_CONTROL` | `"1"`/`"0"` an das Waveshare-Board senden (Spiegel an/aus). `false`: dort RXD0 kurzgeschlossen |
+| `LIDAR.ANGLE_OFFSET`, `GEOMETRY.MODEL_Y/Z_OFFSET` | Geometrie; Winkel und Y per Offset-Kalibrierung, Z nicht bestimmbar |
+| `STEPPER.BACKEND` | `"esp32"` (USB-Seriell, Firmware `firmware/esp32_stepper`) oder `"gpio"` |
+| `STEPPER.RELEASE_AFTER_SCAN` | Treiber nach Scan/Kalibrierung abschalten (kein Fiepen, keine Wärme) |
+| `STEPPER.OPEN_MODE` | `"reset"`: ESP32 startet beim Öffnen des Ports neu; `"keep"` nach Prüfung mit `scripts/esp32_reset_probe.py` |
+| `STORAGE.RAW_FORMATS` / `POINTCLOUD_FORMATS` | Standard `["npy"]` / `["ply"]`; `jsonl`, `bin`, `xyz` nur auf Wunsch |
+
+**Positionssperre.** Erkennt der Server einen Neustart des ESP32 (Startmeldung), sind Scans gesperrt,
+bis in der Oberfläche „Ausgangslage bestätigen“ geklickt wird (`POST /api/stepper/confirm_home`).
+
+**Kalibrierung ohne Motor.** In der Scanliste rechnet ⚙ die Offset-Kalibrierung aus den Rohdaten des
+Scans (`POST /api/calibrate/offset_from_scan`, ~3 s). Der Messlauf „Offset (>180°)“ macht dasselbe
+mit einem neuen Scan.
+
+**Bedienfehler** kommen als HTTP 409 mit `{"error": "…"}` und erscheinen unten rechts.
+
+**Frontend-Updates:** Versionskennung `?v=…` in `frontend/index.html` und `ASSET_VERSION` in
+`frontend/js/app.js` gemeinsam erhöhen, sonst liefert der Browser-Cache alte Skripte.
+
+**Dienst:** `pilidar.service`; Stopp-Frist per Drop-in `pilidar.service.d/stop.conf`
+(`TimeoutStopSec=15`), uvicorn beendet sich nach 3 s selbst.
+
 ## Dokumentation (docs/)
 
 - `PiLiDAR_Technisches_Konzept.docx` — Architektur, Mess-Mathematik, Montage, Inbetriebnahme

@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127b';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127c';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -247,11 +247,14 @@ async function refreshScans() {
         <span><span class="dot ${qa}"></span><b>${s.id}</b></span>
         <span style="display:flex;gap:6px;align-items:center">
           <button class="btn-view3d" data-id="${s.id}" title="In 3D anzeigen">&#128065; 3D</button>
+          <button class="btn-calscan" data-id="${s.id}" title="Offsets aus diesem Scan kalibrieren (ohne Motor)">&#9881;</button>
           <a href="/api/scans/${s.id}/download">ZIP</a>
           <button class="btn-del" data-id="${s.id}">&#128465;</button>
         </span>
       </div>
-      <div style="color:#7d8794;margin-top:2px">Modus ${s.mode || '?'} &middot; ${(s.n_points || 0).toLocaleString('de-DE')} Pkt &middot; QA ${qa || '–'}</div>
+      <div style="color:#7d8794;margin-top:2px">Modus ${s.mode || '?'} &middot; ${(s.n_points || 0).toLocaleString('de-DE')} Pkt &middot; QA ${qa || '–'}${
+        s.qa && typeof s.qa.loop_closure_mm === 'number' ? ` &middot; Überlappung ${s.qa.loop_closure_mm.toFixed(0)} mm` : ''}${
+        s.qa && s.qa.messages && s.qa.messages.length ? `<br><span style="color:#e0b050">${s.qa.messages.join('; ')}</span>` : ''}</div>
       <div class="ann-row">
         <input class="ann-input" type="text" placeholder="Anmerkung…" value="${ann}" />
         <button class="ann-save" data-id="${s.id}">&#10003;</button>
@@ -260,6 +263,9 @@ async function refreshScans() {
   }
   ul.querySelectorAll('.btn-view3d').forEach(btn => {
     btn.onclick = () => loadScanInto3D(btn.dataset.id);
+  });
+  ul.querySelectorAll('.btn-calscan').forEach(btn => {
+    btn.onclick = () => calibrateFromScan(btn.dataset.id);
   });
   ul.querySelectorAll('.btn-del').forEach(btn => {
     btn.onclick = async () => {
@@ -314,6 +320,22 @@ async function loadScanInto3D(scanId) {
     console.error(e);
     $('stPts').textContent = '0';
     toast('Fehler beim Laden der Punktwolke: ' + e);
+  }
+}
+
+// Offset-Kalibrierung aus einem gespeicherten Scan (rechnet auf dem Pi, ~3 s, kein Motor)
+async function calibrateFromScan(scanId) {
+  $('calOut').textContent = `Offset-Kalibrierung aus Scan ${scanId} …`;
+  const resp = await api('/api/calibrate/offset_from_scan', { method: 'POST', body: JSON.stringify({ scan_id: scanId }) });
+  if (!resp.ok) { $('calOut').textContent = 'nicht möglich'; return; }
+  const r = await resp.json();
+  $('calOut').textContent = JSON.stringify(r, null, 1);
+  if (r.ok && confirm(`Aus Scan ${scanId}: Winkel ${r.angle_offset.toFixed(2)}°, Achsversatz ${r.model_y_offset.toFixed(1)} mm ` +
+                      `(Rest ${r.residual_mm.toFixed(1)} mm). Übernehmen? Die Höhe bleibt unverändert.`)) {
+    await api('/api/config/apply', { method: 'POST', body: JSON.stringify({
+      angle_offset: r.angle_offset, model_y_offset: r.model_y_offset }) });
+    refreshWorkerCfg();
+    toast('Offsets übernommen – gespeicherte Scans werden beim Öffnen neu gerechnet.', 'info');
   }
 }
 

@@ -16,6 +16,7 @@
     "MOVE_SPEED_DPS": 20.0,
     "MOVE_ACCEL_DPS2": 40.0,
     "RELEASE_AFTER_SCAN": true,
+    "OPEN_MODE": "reset",
     "DIR_INVERT": false,
     "REPORT_MS": 20,
     "DIR_PIN": 26,
