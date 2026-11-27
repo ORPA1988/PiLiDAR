@@ -103,7 +103,8 @@ y ist der Abstand der Scan-Ebene von der Abtriebsachse, nicht von der Motorwelle
 Änderung von Winkel, y, z und **Drehfaktor** (`GEOMETRY.Z_SCALE`, wahrer Drehwinkel = gemeldet · Faktor)
 sofort neu – Kanten müssen deckungsgleich werden. **Hälften-Verdrehung** (`GEOMETRY.HALF_YAW`): feste Verdrehung der
 vorderen gegen die hintere Fächerhälfte des LiDAR um die Drehachse (Geräteeigenschaft, im Original-PiLiDAR
-`FAN_SPLIT`, dort ca. 2,4°). y und Verdrehung sind aus den Daten allein kaum trennbar.
+`FAN_SPLIT`, dort ca. 2,4°). „Hälften zeigen“ stellt den ganzen Scan dar (vordere Hälfte orange, hintere türkis);
+bei einem 360°-Scan sehen beide Hälften den ganzen Raum, „Mit Scan prüfen“ liefert dazu die Abweichung in mm. y und Verdrehung sind aus den Daten allein kaum trennbar.
 **Kantenpunkte filtern** (3D-Darstellung): Punkte, die von beiden Winkel-Nachbarn weit abweichen, weglassen.
 
 **Bedienfehler** kommen als HTTP 409 mit `{"error": "…"}` und erscheinen unten rechts.
