@@ -254,8 +254,8 @@ class Viewer3D {
     this.pending.za.push(za && za.length === n ? za : new Float32Array(n));
     this.pending.src.push(new Float32Array(n).fill(src));
     if (src + 1 > this.nSources) this.nSources = src + 1;
-    let n = 0; for (const a of this.pending.xyz) n += a.length;
-    if (n >= 15000) this._flush();
+    let n3 = 0; for (const a of this.pending.xyz) n3 += a.length;
+    if (n3 >= 15000) this._flush();
   }
 
   _flush() {
