@@ -116,6 +116,10 @@ class Esp32Stepper:
         # Positionsverfolgung
         self._pos_lock = threading.Lock()
         self._steps = 0                        # letzte bekannte ESP-Schritte
+        # True nach einem ESP32-Neustart (auch beim Öffnen des Ports): Firmware
+        # steht auf pos=0, der Kopf aber evtl. woanders. Scans erst nach
+        # confirm_home() (Benutzer bestätigt Ausgangslage).
+        self.position_lost = False
         self._samples: deque[tuple[float, float, int]] = deque()  # (esp_s, host_t, steps)
         self._sync_window = sync_window_s
         self._last_raw_us: Optional[int] = None
@@ -294,10 +298,8 @@ class Esp32Stepper:
                 self._cv.notify_all()
             return
         if "bereit" in line:  # Startmeldung -> ESP wurde neu gestartet
-            with self._pos_lock:
-                lost = self._steps != 0
-            (log.warning if lost else log.info)("ESP32-Neustart erkannt%s",
-                                                " – Position verloren" if lost else "")
+            log.warning("ESP32-Neustart erkannt – Position unbekannt, Ausgangslage bestätigen")
+            self.position_lost = True
             with self._pos_lock:
                 self._steps = 0
             self._reset_sync()
@@ -552,6 +554,24 @@ class Esp32Stepper:
         if self._fw_moving:
             self.stop_continuous(ramp_down=True)
         self._move_fw_steps(0, absolute=True)
+
+    def confirm_home(self) -> None:
+        """Benutzer bestätigt: Kopf steht in der Ausgangslage -> Position = 0."""
+        with self._cmd_lock:
+            self._ensure_ready_no_enable()
+            if self._fw_moving:
+                raise RuntimeError("Motor fährt noch")
+            self._cmd("ZERO")
+            with self._pos_lock:
+                self._steps = 0
+            self._reset_sync()
+            self.position_lost = False
+
+    def _ensure_ready_no_enable(self) -> None:
+        if not self._connected:
+            self._connect()
+        if self._need_init:
+            self._init_device()
 
     def release(self) -> None:
         """Treiber abschalten (EN 0): Motor stromlos, kein Fiepen/Erwärmen im

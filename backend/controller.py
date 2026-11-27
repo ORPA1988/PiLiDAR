@@ -12,6 +12,7 @@ from collections import deque
 from datetime import datetime
 
 from .calibration import calibrate_offset, calibrate_rotation
+from .pointcloud import frames_to_arrays
 from .config import Config
 from .hardware.lidar import Frame, LidarReader
 from .hardware.stepper import Stepper
@@ -27,6 +28,7 @@ STATE_LIDAR_ONLY = "lidar_only"
 STATE_SCANNING = "scanning"
 STATE_CALIBRATING = "calibrating"
 STATE_PROCESSING = "processing"
+STATE_STOPPING = "stopping"
 
 
 def _offer(q: asyncio.Queue, msg: dict) -> None:
@@ -50,7 +52,7 @@ def _frame_to_msg(fr: Frame) -> dict:
     return {
         "t": round(fr.recv_time, 4),
         "z": round(fr.z_angle, 3),
-        "a": [round(x, 2) for x in fr.angles],
+        "a": fr.angles,          # wird binär (float32) gesendet, kein Runden nötig
         "d": fr.distances,
         "i": fr.intensities,
         "s": fr.speed_dps,
@@ -139,6 +141,7 @@ class ScanController:
                     "intensities": fr.intensities,
                     "speed_dps": fr.speed_dps,
                     "timestamp_ms": fr.timestamp_ms,
+                    "t": fr.recv_time,
                 })
         if self._loop is not None:
             for q in list(self._subscribers):
@@ -156,6 +159,7 @@ class ScanController:
             "lidar_running": self.lidar.running,
             "stepper_backend": "esp32" if isinstance(self.stepper, Esp32Stepper) else "gpio",
             "stepper_connected": bool(getattr(self.stepper, "connected", True)),
+            "position_lost": bool(getattr(self.stepper, "position_lost", False)),
             "frames": len(self._frames),
             "stats": {
                 "packets_ok": self.lidar.stats.packets_ok,
@@ -179,9 +183,20 @@ class ScanController:
             self.state = STATE_IDLE
 
     # --- Scan ----------------------------------------------------------
+    def _check_position(self) -> None:
+        if getattr(self.stepper, "position_lost", False):
+            raise RuntimeError("Position des Drehkopfs unbekannt (ESP32-Neustart). Kopf von Hand "
+                               "in die Ausgangslage drehen und „Ausgangslage bestätigen“ klicken.")
+
+    def confirm_home(self) -> None:
+        if self.state not in (STATE_IDLE, STATE_LIDAR_ONLY):
+            raise RuntimeError(f"Beschäftigt: {self.state}")
+        self.stepper.confirm_home()
+
     def start_scan(self, mode: str = "B", name: str = "") -> str:
         if self.state not in (STATE_IDLE, STATE_LIDAR_ONLY):
             raise RuntimeError(f"Beschäftigt: {self.state}")
+        self._check_position()
         # Den LiDAR-Spiegel beim Übergang aus 2D-Live NICHT aus- und wieder
         # einschalten – er soll durchgehend laufen. lidar.start() in _run_scan
         # ist idempotent (No-op, falls bereits aktiv).
@@ -263,15 +278,15 @@ class ScanController:
 
     def _finalize(self, scan_id, mode, scan_angle, overlap, t0) -> None:
         with self._lock:
-            frames = list(self._frames)
+            frames = frames_to_arrays(list(self._frames))  # einmal umwandeln, dann vektorisiert
         geom = self.cfg.GEOMETRY
         lcfg = self.cfg.LIDAR
         pos = (0.0, geom["MODEL_Y_OFFSET"], geom["MODEL_Z_OFFSET"])
         # Server-Referenz-Punktwolke (Client rechnet ebenfalls; hier für Export/QA)
         pts, inten = build_pointcloud(frames, lcfg["ANGLE_OFFSET"], pos,
                                       lcfg["DISTANCE_MIN_MM"], lcfg["DISTANCE_MAX_MM"])
-        self.store.save_raw_frames(scan_id, frames, self.cfg.STORAGE["RAW_FORMATS"])
-        self.store.save_pointcloud(scan_id, pts, inten, self.cfg.STORAGE["POINTCLOUD_FORMATS"])
+        self.store.save_raw_frames(scan_id, frames, self.cfg.STORAGE.get("RAW_FORMATS", ["npy"]))
+        self.store.save_pointcloud(scan_id, pts, inten, self.cfg.STORAGE.get("POINTCLOUD_FORMATS", ["ply"]))
         stats = {
             "crc_error_rate": self.lidar.stats.crc_error_rate,
             "packet_rate": self.lidar.stats.packet_rate,
@@ -286,7 +301,7 @@ class ScanController:
             "overlap_deg": overlap,
             "lidar": lcfg.as_dict() if hasattr(lcfg, "as_dict") else dict(lcfg),
             "geometry": dict(geom),
-            "n_frames": len(frames),
+            "n_frames": int(len(frames["z_angle"])),
             "n_points": int(len(pts)),
             "qa": qa,
         }
@@ -294,7 +309,13 @@ class ScanController:
         self.store.append_log(scan_id, f"Scan {scan_id} fertig: {len(pts)} Punkte, QA={qa['status']}")
 
     def stop(self) -> None:
-        self.state = STATE_IDLE
+        """Abbrechen. Läuft ein Scan oder eine Kalibrierung, beendet deren Thread
+        den Ablauf selbst (Kopf zurück, Treiber aus) und setzt danach "idle" –
+        bis dahin "stopping", damit kein neuer Lauf dazwischen startet."""
+        if self.state in (STATE_SCANNING, STATE_CALIBRATING):
+            self.state = STATE_STOPPING
+        elif self.state != STATE_PROCESSING:
+            self.state = STATE_IDLE
         self._recording = False
         try:
             self.stepper.stop_continuous(ramp_down=False)
@@ -307,6 +328,7 @@ class ScanController:
         """Vollständiger 360°-Lauf, dann Getriebeverhältnis schätzen."""
         if self.state != STATE_IDLE:
             raise RuntimeError(f"Beschäftigt: {self.state}")
+        self._check_position()
         self.state = STATE_CALIBRATING
         try:
             self.stepper.home()
@@ -335,6 +357,7 @@ class ScanController:
         """Scan >180° (inkl. Δ), dann Achsversatz + angle_offset optimieren."""
         if self.state != STATE_IDLE:
             raise RuntimeError(f"Beschäftigt: {self.state}")
+        self._check_position()
         self.state = STATE_CALIBRATING
         try:
             scan_angle = self.cfg.MODE_B_CONTINUOUS["SCAN_ANGLE"]
@@ -357,9 +380,12 @@ class ScanController:
             geom = self.cfg.GEOMETRY
             lcfg = self.cfg.LIDAR
             pos = (0.0, geom["MODEL_Y_OFFSET"], geom["MODEL_Z_OFFSET"])
+            if self.state != STATE_CALIBRATING:
+                return {"ok": False, "reason": "abgebrochen"}
             result = calibrate_offset(frames, lcfg["ANGLE_OFFSET"], pos,
                                       lcfg["DISTANCE_MIN_MM"], lcfg["DISTANCE_MAX_MM"],
-                                      scan_angle, overlap)
+                                      scan_angle, overlap,
+                                      should_abort=lambda: self.state != STATE_CALIBRATING)
         finally:
             self.stepper.home()
             self._release_stepper()

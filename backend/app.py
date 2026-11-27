@@ -11,9 +11,11 @@ import asyncio
 import os
 import subprocess
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect
+import numpy as np
+from fastapi import Body, FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -32,23 +34,47 @@ FRONTEND = ROOT / "frontend"
 
 FORCE_MOCK = os.environ.get("PILIDAR_MOCK", "0") == "1"
 
-app = FastAPI(title="PiLiDAR", version="2.0")
 controller = ScanController(config, force_mock=FORCE_MOCK)
 
 if FORCE_MOCK:
     # Synthetischer LiDAR -> komplette UI ohne Hardware demonstrierbar
     from .hardware.mock_serial import MockLidarSerial
     controller.lidar._serial_factory = lambda: MockLidarSerial()
+    try:
+        controller.confirm_home()  # simulierter ESP32: Ausgangslage gilt als bekannt
+    except Exception:
+        pass
+
+_shutting_down = asyncio.Event()
 
 
-@app.on_event("startup")
-async def _startup():
+@asynccontextmanager
+async def _lifespan(_app):
     controller.bind_loop(asyncio.get_running_loop())
+    yield
+    _shutting_down.set()           # WebSocket-Schleifen beenden
+    await asyncio.to_thread(controller.close)   # Treiber aus (EN 0), Ports schließen
 
 
-@app.on_event("shutdown")
-async def _shutdown():
-    controller.close()
+app = FastAPI(title="PiLiDAR", version="2.0", lifespan=_lifespan)
+
+
+@app.exception_handler(RuntimeError)
+@app.exception_handler(TimeoutError)
+async def _busy_handler(_request: Request, exc: Exception):
+    """Bedienfehler (Beschäftigt, Position unbekannt, Port fehlt …) als lesbare
+    JSON-Meldung statt "Internal Server Error" – die Oberfläche zeigt sie an."""
+    return JSONResponse(status_code=409, content={"ok": False, "error": str(exc)})
+
+
+@app.middleware("http")
+async def _no_stale_frontend(request: Request, call_next):
+    """Frontend-Dateien immer neu validieren (ETag/304), sonst läuft nach einem
+    Update alter JavaScript-Code aus dem Browser-Cache."""
+    resp = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 # --- REST -------------------------------------------------------------
@@ -105,6 +131,23 @@ async def api_scan_pointcloud(scan_id: str):
     if len(buf) <= 4:  # nur der n=0-Header => keine Punktwolke
         return JSONResponse(status_code=404, content={"error": "keine Punktwolke"})
     return Response(content=buf, media_type="application/octet-stream")
+
+
+@app.get("/api/scans/{scan_id}/raw")
+async def api_scan_raw(scan_id: str):
+    """Rohdaten als Binärpuffer; der Browser rechnet daraus die Punktwolke mit
+    den aktuellen Offsets (siehe storage.load_raw_packed)."""
+    buf = await asyncio.to_thread(controller.store.load_raw_packed, scan_id)
+    if buf is None:
+        return JSONResponse(status_code=404, content={"error": "keine Rohdaten"})
+    return Response(content=buf, media_type="application/octet-stream")
+
+
+@app.post("/api/stepper/confirm_home")
+async def api_confirm_home():
+    """Benutzer bestätigt: Drehkopf steht in der Ausgangslage (Position = 0)."""
+    await asyncio.to_thread(controller.confirm_home)
+    return {"ok": True}
 
 
 @app.get("/api/scans/{scan_id}/download")
@@ -203,6 +246,7 @@ async def api_config_apply(payload: dict):
 async def ws_scan(ws: WebSocket):
     await ws.accept()
     q = controller.subscribe()
+    lidar_cfg = config.LIDAR
     # geometrische Parameter einmalig senden, damit der Client rechnen kann
     await ws.send_json({
         "type": "init",
@@ -213,13 +257,36 @@ async def ws_scan(ws: WebSocket):
         "dist_max": config.LIDAR["DISTANCE_MAX_MM"],
     })
     try:
-        while True:
-            msg = await q.get()
-            await ws.send_json({"type": "frame", **msg})
+        while not _shutting_down.is_set():
+            try:
+                first = await asyncio.wait_for(q.get(), timeout=0.5)
+            except asyncio.TimeoutError:
+                continue
+            # alles Wartende bündeln und binär senden (statt 1 800 JSON-Nachrichten/s)
+            batch = [first]
+            while len(batch) < 400:
+                try:
+                    batch.append(q.get_nowait())
+                except asyncio.QueueEmpty:
+                    break
+            await ws.send_bytes(_pack_frames(batch))
+            await asyncio.sleep(0.03)   # ~30 Pakete/s genügen für die Anzeige
     except WebSocketDisconnect:
         pass
     finally:
         controller.unsubscribe(q)
+
+
+def _pack_frames(batch: list[dict]) -> bytes:
+    """Binärformat (little-endian) für den Browser:
+    uint32 n | float32 z[n] | float32 speed[n] | float32 a[n*12] | uint16 d[n*12] | uint8 i[n*12]"""
+    n = len(batch)
+    z = np.fromiter((m["z"] for m in batch), dtype="<f4", count=n)
+    s = np.fromiter((m["s"] for m in batch), dtype="<f4", count=n)
+    a = np.asarray([m["a"] for m in batch], dtype="<f4")
+    d = np.asarray([m["d"] for m in batch], dtype="<u2")
+    i = np.asarray([m["i"] for m in batch], dtype=np.uint8)
+    return np.asarray([n], dtype="<u4").tobytes() + z.tobytes() + s.tobytes() + a.tobytes() + d.tobytes() + i.tobytes()
 
 
 # --- statisches Frontend (zuletzt gemountet) -------------------------
@@ -233,7 +300,10 @@ else:  # pragma: no cover
 
 def main():
     import uvicorn
-    uvicorn.run(app, host=config.SERVER["HOST"], port=config.SERVER["PORT"])
+    # kurze Frist beim Beenden: sonst wartet uvicorn auf offene WebSockets, bis
+    # systemd nach 90 s hart beendet und controller.close() (EN 0) nie läuft
+    uvicorn.run(app, host=config.SERVER["HOST"], port=config.SERVER["PORT"],
+                timeout_graceful_shutdown=3)
 
 
 if __name__ == "__main__":

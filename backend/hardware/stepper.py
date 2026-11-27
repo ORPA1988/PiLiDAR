@@ -177,6 +177,14 @@ class Stepper:
             self._cont_angle = 0.0
             self._steps = 0
 
+    position_lost = False
+
+    def confirm_home(self) -> None:
+        """Ausgangslage bestätigen -> Winkel 0."""
+        with self._angle_lock:
+            self._cont_angle = 0.0
+            self._steps = 0
+
     def release(self) -> None:
         """Treiber abschalten – ohne EN-Pin (GPIO-Variante) nicht möglich: No-op."""
 

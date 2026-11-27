@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .pointcloud import build_pointcloud
+from .pointcloud import build_pointcloud, frames_to_arrays, select_frames
 
 try:
     from scipy.spatial import cKDTree
@@ -16,10 +16,11 @@ except Exception:  # pragma: no cover
     cKDTree = None
 
 
-def rpm_stability(frames: list[dict]) -> dict:
-    if not frames:
+def rpm_stability(frames) -> dict:
+    arr = frames_to_arrays(frames)
+    sp = np.asarray(arr.get("speed_dps", np.zeros(0)), dtype=float)
+    if sp.size == 0:
         return {"mean_dps": 0.0, "cv": 0.0}
-    sp = np.array([fr.get("speed_dps", 0.0) for fr in frames], dtype=float)
     sp = sp[sp > 0]
     if sp.size == 0:
         return {"mean_dps": 0.0, "cv": 0.0}
@@ -30,19 +31,20 @@ def rpm_stability(frames: list[dict]) -> dict:
 
 def loop_closure_residual(frames, angle_offset, position_offset, dist_min, dist_max,
                           scan_angle, overlap_deg, max_pts=4000) -> float | None:
-    """Mittlerer Nächster-Nachbar-Abstand [mm] zwischen Anfangs- und
+    """Median-Nächster-Nachbar-Abstand [mm] zwischen Anfangs- und
     Überlappungs-Sektor. Großer Wert ⇒ Schrittverlust/Schlupf/Fehlkalibrierung.
-    Nur sinnvoll bei vollständiger Umdrehung (≥ 350°)."""
-    if cKDTree is None or not frames:
+
+    Die Scan-Ebene enthält die Drehachse: nach 180° wird dieselbe Ebene erneut
+    erfasst. Sinnvoll daher ab scan_angle >= 180° + Überlappung (Modus B: 184°)."""
+    if cKDTree is None or frames is None or len(frames) == 0 or overlap_deg <= 0:
         return None
-    if scan_angle < 350:
-        return None  # Kein räumlicher Überlapp bei Teilscans
-    z = np.array([fr["z_angle"] for fr in frames], dtype=float)
-    start_sel = [fr for fr, zz in zip(frames, z) if 0.0 <= zz <= overlap_deg]
-    # Überlappung am Ende: derselbe Raumbereich, ~180° weitergedreht
-    end_lo, end_hi = scan_angle - overlap_deg, scan_angle
-    end_sel = [fr for fr, zz in zip(frames, z) if end_lo <= zz <= end_hi]
-    if len(start_sel) < 5 or len(end_sel) < 5:
+    if scan_angle < 180.0 + overlap_deg - 1e-6:
+        return None  # kein räumlicher Überlapp
+    arr = frames_to_arrays(frames)
+    start_sel = select_frames(arr, 0.0, overlap_deg)
+    # Überlappung am Ende: dieselbe Ebene, 180° weitergedreht
+    end_sel = select_frames(arr, scan_angle - overlap_deg, scan_angle)
+    if len(start_sel["z_angle"]) < 5 or len(end_sel["z_angle"]) < 5:
         return None
     p_start, _ = build_pointcloud(start_sel, angle_offset, position_offset, dist_min, dist_max)
     p_end, _ = build_pointcloud(end_sel, angle_offset, position_offset, dist_min, dist_max)
@@ -58,9 +60,11 @@ def loop_closure_residual(frames, angle_offset, position_offset, dist_min, dist_
 def compute_qa(frames, lidar_stats: dict, geom: dict, lidar_cfg: dict,
                scan_angle: float, overlap_deg: float) -> dict:
     pos = (0.0, geom.get("MODEL_Y_OFFSET", 0.0), geom.get("MODEL_Z_OFFSET", 0.0))
+    frames = frames_to_arrays(frames)
+    n = len(frames["z_angle"])
     qa = {
-        "n_frames": len(frames),
-        "n_points_raw": len(frames) * 12,
+        "n_frames": n,
+        "n_points_raw": n * 12,
         "crc_error_rate": lidar_stats.get("crc_error_rate", 0.0),
         "packet_rate_hz": lidar_stats.get("packet_rate", 0.0),
         "rpm": rpm_stability(frames),

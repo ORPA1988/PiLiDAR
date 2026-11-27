@@ -13,6 +13,13 @@
     <span id="qa" class="badge"></span>
   </header>
 
+  <div id="posBanner" class="banner hidden">
+    Position des Drehkopfs unbekannt (ESP32-Neustart). Kopf von Hand in die Ausgangslage drehen
+    (Treiber ist aus), dann bestätigen – vorher sind Scans gesperrt.
+    <button id="btnConfirmHome" class="primary">Ausgangslage bestätigen</button>
+  </div>
+  <div id="toast"></div>
+
   <main>
     <section class="panel controls">
       <h2>Steuerung</h2>

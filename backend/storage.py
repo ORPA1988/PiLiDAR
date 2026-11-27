@@ -3,8 +3,8 @@
 Struktur:
   scans/<id>/
     meta.json
-    raw/        lidar_raw.bin (+ .npy), frames.jsonl
-    pointcloud/ <id>.ply, <id>.xyz, ...
+    raw/        lidar_raw.npz (Standard; optional lidar_raw.bin, frames.jsonl)
+    pointcloud/ <id>.ply (optional <id>.xyz)
     images/     (später Kamera)
     sensors/    (später IMU)
     log.txt
@@ -18,6 +18,9 @@ import zipfile
 from pathlib import Path
 
 import numpy as np
+
+
+_BIN_DTYPE = np.dtype([("z", "<f4"), ("a", "<f4", 12), ("d", "<u2", 12), ("i", "u1", 12)])
 
 
 class ScanStore:
@@ -61,32 +64,68 @@ class ScanStore:
             fh.write(line.rstrip() + "\n")
 
     # ------------------------------------------------------------------
-    def save_raw_frames(self, scan_id: str, frames: list[dict], formats=("bin", "npy")) -> None:
+    def save_raw_frames(self, scan_id: str, frames, formats=("npy",)) -> None:
+        """Rohdaten speichern. frames: Liste von dicts oder dict von Arrays
+        (pointcloud.frames_to_arrays). Standard nur lidar_raw.npz (~10 MB je Scan):
+        z_angle, angles, distances, intensities + speed_dps, timestamp_ms, t.
+        "jsonl"/"bin" sind optional (groß und langsam: 80 MB / 9 s auf dem Pi)."""
+        from .pointcloud import frames_to_arrays
         d = self.scan_dir(scan_id) / "raw"
-        # JSONL ist immer hilfreich für Nachvollziehbarkeit
-        with open(d / "frames.jsonl", "w", encoding="utf-8") as fh:
-            for fr in frames:
-                fh.write(json.dumps(fr, separators=(",", ":")) + "\n")
-        if "npy" in formats:
-            # kompaktes strukturiertes Array: z_angle + 12*(dist,intensity)
-            n = len(frames)
-            z = np.array([fr["z_angle"] for fr in frames], dtype=np.float32)
-            dist = np.array([fr["distances"] for fr in frames], dtype=np.uint16)
-            ang = np.array([fr["angles"] for fr in frames], dtype=np.float32)
-            inten = np.array([fr["intensities"] for fr in frames], dtype=np.uint8)
-            np.savez_compressed(d / "lidar_raw.npz", z_angle=z, angles=ang,
-                                distances=dist, intensities=inten)
+        arr = frames_to_arrays(frames)
+        if "npy" in formats or "npz" in formats:
+            data = {"z_angle": np.asarray(arr["z_angle"], dtype=np.float32),
+                    "angles": np.asarray(arr["angles"], dtype=np.float32),
+                    "distances": np.asarray(arr["distances"], dtype=np.uint16),
+                    "intensities": np.asarray(arr["intensities"], dtype=np.uint8)}
+            for k in ("speed_dps", "timestamp_ms", "t"):
+                if k in arr:
+                    data[k] = arr[k]
+            np.savez_compressed(d / "lidar_raw.npz", **data)
+        if "jsonl" in formats:
+            with open(d / "frames.jsonl", "w", encoding="utf-8") as fh:
+                for i in range(len(arr["z_angle"])):
+                    fh.write(json.dumps({"z_angle": float(arr["z_angle"][i]),
+                                         "angles": [float(x) for x in arr["angles"][i]],
+                                         "distances": [int(x) for x in arr["distances"][i]],
+                                         "intensities": [int(x) for x in arr["intensities"][i]]},
+                                        separators=(",", ":")) + "\n")
         if "bin" in formats:
-            # rohe Aneinanderreihung: float32 z_angle, dann 12x(float32 angle, uint16 dist, uint8 int)
-            with open(d / "lidar_raw.bin", "wb") as fh:
-                for fr in frames:
-                    fh.write(np.float32(fr["z_angle"]).tobytes())
-                    fh.write(np.asarray(fr["angles"], dtype=np.float32).tobytes())
-                    fh.write(np.asarray(fr["distances"], dtype=np.uint16).tobytes())
-                    fh.write(np.asarray(fr["intensities"], dtype=np.uint8).tobytes())
+            # je Frame: float32 z_angle, 12x float32 angle, 12x uint16 dist, 12x uint8 int
+            n = len(arr["z_angle"])
+            rec = np.empty(n, dtype=_BIN_DTYPE)
+            rec["z"] = arr["z_angle"]; rec["a"] = arr["angles"]
+            rec["d"] = arr["distances"]; rec["i"] = arr["intensities"]
+            rec.tofile(d / "lidar_raw.bin")
+
+    def load_raw_arrays(self, scan_id: str):
+        """Rohdaten (dict von Arrays) laden oder None."""
+        d = self.scan_dir(scan_id) / "raw"
+        npz = d / "lidar_raw.npz"
+        if npz.exists():
+            with np.load(npz) as z:
+                return {k: z[k] for k in z.files}
+        binf = d / "lidar_raw.bin"
+        if binf.exists():
+            rec = np.fromfile(binf, dtype=_BIN_DTYPE)
+            return {"z_angle": rec["z"], "angles": rec["a"], "distances": rec["d"], "intensities": rec["i"]}
+        return None
+
+    def load_raw_packed(self, scan_id: str) -> bytes | None:
+        """Rohdaten als Binärpuffer für den Browser (der Worker rechnet die
+        Punktwolke mit den AKTUELLEN Offsets). Layout little-endian:
+          uint32 n | float32 z[n] | float32 angles[n*12] | uint16 dist[n*12] | uint8 int[n*12]"""
+        arr = self.load_raw_arrays(scan_id)
+        if arr is None:
+            return None
+        n = len(arr["z_angle"])
+        return (np.asarray([n], dtype="<u4").tobytes()
+                + np.ascontiguousarray(arr["z_angle"], dtype="<f4").tobytes()
+                + np.ascontiguousarray(arr["angles"], dtype="<f4").tobytes()
+                + np.ascontiguousarray(arr["distances"], dtype="<u2").tobytes()
+                + np.ascontiguousarray(arr["intensities"], dtype=np.uint8).tobytes())
 
     # ------------------------------------------------------------------
-    def save_pointcloud(self, scan_id: str, points_mm, intensities, formats=("ply", "xyz")) -> None:
+    def save_pointcloud(self, scan_id: str, points_mm, intensities, formats=("ply",)) -> None:
         d = self.scan_dir(scan_id) / "pointcloud"
         pts_m = np.asarray(points_mm, dtype=float) / 1000.0  # mm -> m
         inten = np.asarray(intensities, dtype=float)

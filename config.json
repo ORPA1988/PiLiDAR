@@ -51,8 +51,8 @@
 
   "STORAGE": {
     "BASE_DIR": "scans",
-    "RAW_FORMATS": ["bin", "npy"],
-    "POINTCLOUD_FORMATS": ["ply", "xyz"]
+    "RAW_FORMATS": ["npy"],
+    "POINTCLOUD_FORMATS": ["ply"]
   },
 
   "SERVER": {

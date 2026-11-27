@@ -112,6 +112,26 @@ def test_motor_commands():
     print("OK  Motorbefehle: aus = nichts gesendet, an = b'010'")
 
 
+def test_vectorized_equals_reference():
+    from backend.pointcloud import build_pointcloud, polar_to_plane, transform_frame
+    rng = np.random.default_rng(3)
+    frames = [{"z_angle": float(rng.uniform(0, 184)), "angles": list(rng.uniform(0, 360, 12)),
+               "distances": list(rng.integers(0, 5000, 12)), "intensities": list(rng.integers(0, 255, 12))}
+              for _ in range(300)]
+    pos = (0.0, -37.5, -41.9)
+    pts, _ = build_pointcloud(frames, 178.95, pos, 30, 25000)
+    ref = []
+    for fr in frames:
+        # Winkel wie im Speicherformat als float32 (LiDAR-Auflösung 0,01°)
+        a = np.asarray(fr["angles"], dtype=np.float32).astype(float)
+        d = np.asarray(fr["distances"], float)
+        m = (d >= 30) & (d <= 25000)
+        ref.append(transform_frame(polar_to_plane(a[m], d[m]), fr["z_angle"], 178.95, pos))
+    ref = np.vstack(ref)
+    assert pts.shape == ref.shape and np.abs(pts - ref).max() < 1e-6
+    print(f"OK  vektorisierte Punktwolke = Referenz ({len(pts)} Punkte)")
+
+
 def test_pointcloud_geometry():
     from backend.pointcloud import build_pointcloud
     # Ein Punkt bei Winkel 0°, Distanz 1000 mm, z_angle 90° -> erwartete Lage prüfen
@@ -138,6 +158,15 @@ def test_mock_scan():
     cfg._data["MODE_B_CONTINUOUS"]["SPEED_DPS"] = 40.0
 
     ctrl = ScanController(cfg, force_mock=True)
+    # simulierter ESP32 meldet beim Öffnen einen Neustart -> Position unbekannt
+    if getattr(ctrl.stepper, "position_lost", False):
+        try:
+            ctrl.start_scan(mode="B")
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("Scan trotz unbekannter Position gestartet")
+        ctrl.confirm_home()
     # LiDAR mit gedrosselter Mock-Serial bestücken (~realistische Paketrate)
     pkt = build_packet()
     ctrl.lidar._serial_factory = lambda: MockSerial(pkt, packet_delay=0.0006)
@@ -153,7 +182,13 @@ def test_mock_scan():
     ctrl.close()
     d = Path(cfg.STORAGE["BASE_DIR"]) / scan_id
     assert (d / "meta.json").exists(), "meta.json fehlt"
-    assert (d / "raw" / "frames.jsonl").exists(), "Rohdaten fehlen"
+    assert (d / "raw" / "lidar_raw.npz").exists(), "Rohdaten fehlen"
+    assert not (d / "raw" / "frames.jsonl").exists(), "frames.jsonl sollte nicht mehr erzeugt werden"
+    raw = ctrl.store.load_raw_arrays(scan_id)
+    assert {"z_angle", "angles", "distances", "intensities", "t", "speed_dps"} <= set(raw), raw.keys()
+    buf = ctrl.store.load_raw_packed(scan_id)
+    n = struct.unpack("<I", buf[:4])[0]
+    assert n == len(raw["z_angle"]) and len(buf) == 4 + n * (4 + 48 + 24 + 12)
     print(f"OK  Mock-Scan: {scan_id}, Ordner+meta+raw vorhanden, "
           f"finaler Winkel~={ctrl.stepper.get_current_angle():.1f}")
 
@@ -162,6 +197,7 @@ if __name__ == "__main__":
     test_crc_roundtrip()
     test_decode()
     test_motor_commands()
+    test_vectorized_equals_reference()
     test_pointcloud_geometry()
     test_mock_scan()
     print("\nAlle Trockentests bestanden.")

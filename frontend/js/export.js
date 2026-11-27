@@ -1,27 +1,28 @@
-/* PLY-Export (ASCII) im Browser aus den Worker-Daten. */
+/* PLY-Export im Browser aus den Worker-Daten (binär, little-endian). */
 'use strict';
 
 function exportPLY(xyz, inten, total) {
-  const lines = [
-    'ply', 'format ascii 1.0', `element vertex ${total}`,
+  const header = [
+    'ply', 'format binary_little_endian 1.0', `element vertex ${total}`,
     'property float x', 'property float y', 'property float z',
     'property uchar red', 'property uchar green', 'property uchar blue',
-    'end_header'
-  ];
-  const parts = [lines.join('\n') + '\n'];
-  const chunk = [];
-  for (let i = 0; i < total; i++) {
+    'end_header', ''
+  ].join('\n');
+  const body = new ArrayBuffer(total * 15);
+  const dv = new DataView(body);
+  for (let i = 0, o = 0; i < total; i++, o += 15) {
+    dv.setFloat32(o, xyz[i * 3], true);
+    dv.setFloat32(o + 4, xyz[i * 3 + 1], true);
+    dv.setFloat32(o + 8, xyz[i * 3 + 2], true);
     const g = Math.max(0, Math.min(255, Math.round(inten[i] || 0)));
-    chunk.push(`${xyz[i * 3].toFixed(4)} ${xyz[i * 3 + 1].toFixed(4)} ${xyz[i * 3 + 2].toFixed(4)} ${g} ${g} ${g}`);
-    if (chunk.length >= 5000) { parts.push(chunk.join('\n') + '\n'); chunk.length = 0; }
+    dv.setUint8(o + 12, g); dv.setUint8(o + 13, g); dv.setUint8(o + 14, g);
   }
-  if (chunk.length) parts.push(chunk.join('\n') + '\n');
-  const blob = new Blob(parts, { type: 'application/octet-stream' });
+  const blob = new Blob([header, body], { type: 'application/octet-stream' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `pilidar_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.ply`;
   a.click();
-  URL.revokeObjectURL(a.href);
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
 window.exportPLY = exportPLY;

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .pointcloud import build_pointcloud
+from .pointcloud import build_pointcloud, frames_to_arrays, select_frames
 
 try:
     from scipy.optimize import minimize
@@ -72,35 +72,43 @@ def calibrate_rotation(frames_360, nominal_gear_ratio: float) -> dict:
     }
 
 
+class CalibrationAborted(Exception):
+    """Kalibrierung vom Benutzer abgebrochen."""
+
+
 def calibrate_offset(frames, angle_offset0, position_offset0, dist_min, dist_max,
-                     scan_angle, overlap_deg) -> dict:
+                     scan_angle, overlap_deg, should_abort=None) -> dict:
     """Optimiert Achsversatz (Y,Z) + angle_offset so, dass die in der
     Überlappungszone doppelt erfassten Flächen zusammenfallen."""
     if minimize is None or cKDTree is None:
         return {"ok": False, "reason": "scipy nicht verfügbar"}
-    z = np.array([fr["z_angle"] for fr in frames], dtype=float)
-    overlap_lo = scan_angle - overlap_deg
-    a_sel = [fr for fr, zz in zip(frames, z) if 0 <= zz <= overlap_deg]
-    b_sel = [fr for fr, zz in zip(frames, z) if overlap_lo <= zz <= scan_angle]
-    if len(a_sel) < 5 or len(b_sel) < 5:
+    arr = frames_to_arrays(frames)
+    a_sel = select_frames(arr, 0.0, overlap_deg)
+    b_sel = select_frames(arr, scan_angle - overlap_deg, scan_angle)
+    if len(a_sel["z_angle"]) < 5 or len(b_sel["z_angle"]) < 5:
         return {"ok": False, "reason": "keine ausreichende Überlappung"}
 
     def residual(params):
+        if should_abort is not None and should_abort():
+            raise CalibrationAborted()
         ao, oy, oz = params
         pos = (0.0, oy, oz)
         pa, _ = build_pointcloud(a_sel, ao, pos, dist_min, dist_max)
         pb, _ = build_pointcloud(b_sel, ao, pos, dist_min, dist_max)
         if len(pa) < 5 or len(pb) < 5:
             return 1e9
-        if len(pa) > 2000:
-            pa = pa[np.random.choice(len(pa), 2000, replace=False)]
+        if len(pa) > 2000:  # feste Auswahl -> glatte Zielfunktion für Nelder-Mead
+            pa = pa[np.random.default_rng(0).choice(len(pa), 2000, replace=False)]
         tree = cKDTree(pb)
         d, _ = tree.query(pa, k=1)
         return float(np.median(d))
 
     x0 = [angle_offset0, position_offset0[1], position_offset0[2]]
-    res = minimize(residual, x0, method="Nelder-Mead",
-                   options={"xatol": 0.05, "fatol": 0.5, "maxiter": 200})
+    try:
+        res = minimize(residual, x0, method="Nelder-Mead",
+                       options={"xatol": 0.05, "fatol": 0.5, "maxiter": 200})
+    except CalibrationAborted:
+        return {"ok": False, "reason": "abgebrochen"}
     return {
         "ok": bool(res.success),
         "angle_offset": float(res.x[0]),

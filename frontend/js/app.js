@@ -2,7 +2,31 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
-const api = (path, opts) => fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+const rawFetch = (path, opts) => fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+
+// Meldung unten rechts einblenden (Fehler des Servers, Hinweise)
+function toast(text, kind = 'error') {
+  const box = $('toast');
+  if (!box) { console.warn(text); return; }
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  el.textContent = text;
+  box.appendChild(el);
+  setTimeout(() => el.remove(), kind === 'error' ? 9000 : 4000);
+}
+
+// Wie fetch, zeigt aber Serverfehler (409 „Beschäftigt“, Position unbekannt …) an
+async function api(path, opts) {
+  let r;
+  try { r = await rawFetch(path, opts); }
+  catch (e) { if (opts && opts.method && opts.method !== 'GET') toast('Pi nicht erreichbar: ' + e.message); throw e; }
+  if (!r.ok && opts && opts.method && opts.method !== 'GET') {
+    let msg = `${r.status} ${r.statusText}`;
+    try { const j = await r.clone().json(); if (j.error) msg = j.error; } catch (e) {}
+    toast(msg);
+  }
+  return r;
+}
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
@@ -12,7 +36,18 @@ let ws = null;
 let viewMode = '2d';
 let totalPoints = 0;
 let lidarResDeg = 0;
-let lastState = null;  // für das automatische Nachladen der Scan-Liste   // vertikale Winkelauflösung [°], live aus Frames gemessen
+let lastState = null;  // für das automatische Nachladen der Scan-Liste
+
+// Geometrie-Parameter für den Worker aus der aktuellen Konfiguration
+async function refreshWorkerCfg() {
+  try {
+    const c = await (await rawFetch('/api/config')).json();
+    worker.postMessage({ type: 'init', angle_offset: c.LIDAR.ANGLE_OFFSET,
+      model_y: c.GEOMETRY.MODEL_Y_OFFSET, model_z: c.GEOMETRY.MODEL_Z_OFFSET,
+      dist_min: c.LIDAR.DISTANCE_MIN_MM, dist_max: c.LIDAR.DISTANCE_MAX_MM });
+  } catch (e) { /* offline – Init kommt mit dem WebSocket */ }
+}
+refreshWorkerCfg();   // vertikale Winkelauflösung [°], live aus Frames gemessen
 
 v2d.start();
 // Nachleuchtzeit der 2D-Ansicht (je Browser gemerkt)
@@ -34,7 +69,11 @@ worker.onmessage = (ev) => {
   if (m.type === 'points') {
     v3d.addPoints(m.xyz, m.inten);
     totalPoints = m.total;
-    $('stPts').textContent = totalPoints.toLocaleString('de-DE');
+    $('stPts').textContent = m.progress !== undefined && m.progress < 1
+      ? `${totalPoints.toLocaleString('de-DE')} (${Math.round(m.progress * 100)} %)`
+      : totalPoints.toLocaleString('de-DE');
+  } else if (m.type === 'rawDone') {
+    $('stPts').textContent = m.total.toLocaleString('de-DE');
   } else if (m.type === 'exportData') {
     exportPLY(m.xyz, m.inten, m.total);
   }
@@ -44,19 +83,25 @@ worker.onmessage = (ev) => {
 function connectWS() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws/scan`);
+  ws.binaryType = 'arraybuffer';
   ws.onmessage = (ev) => {
-    const m = JSON.parse(ev.data);
-    if (m.type === 'init') {
-      worker.postMessage({ type: 'init', ...m });
-    } else if (m.type === 'frame') {
-      // Winkelauflösung aus benachbarten Punkten eines Pakets messen (Wrap ausschließen)
-      if (m.a && m.a.length >= 2) {
-        const step = Math.abs(m.a[1] - m.a[0]);
-        if (step > 0 && step < 5) lidarResDeg = step;
-      }
-      v2d.addFrame(m.a, m.d);  // immer aktualisieren (Nachleuchten je Winkelsegment)
-      worker.postMessage({ type: 'frame', a: m.a, d: m.d, i: m.i, z: m.z });
+    if (typeof ev.data === 'string') {           // Init (JSON)
+      const m = JSON.parse(ev.data);
+      if (m.type === 'init') worker.postMessage({ type: 'init', ...m });
+      return;
     }
+    // Binär-Bündel: uint32 n | f32 z[n] | f32 s[n] | f32 a[n*12] | u16 d[n*12] | u8 i[n*12]
+    const buf = ev.data;
+    const n = new Uint32Array(buf, 0, 1)[0];
+    if (!n) return;
+    const a = new Float32Array(buf, 4 + n * 8, n * 12);
+    const d = new Uint16Array(buf, 4 + n * 56, n * 12);
+    // Winkelauflösung aus benachbarten Punkten eines Pakets (Wrap ausschließen)
+    const step = Math.abs(a[1] - a[0]);
+    if (step > 0 && step < 5) lidarResDeg = step;
+    for (let f = 0; f < n; f++)                   // 2D: Nachleuchten je Winkelsegment
+      v2d.addFrame(a.subarray(f * 12, f * 12 + 12), d.subarray(f * 12, f * 12 + 12));
+    worker.postMessage({ type: 'batch', buf }, [buf]);
   };
   ws.onclose = () => setTimeout(connectWS, 1500);
 }
@@ -74,18 +119,24 @@ $('btnStop').onclick = () => api('/api/scan/stop', { method: 'POST' });
 
 $('btnCalRot').onclick = async () => {
   $('calOut').textContent = 'Rotationskalibrierung läuft (360°-Lauf)…';
-  const r = await (await api('/api/calibrate/rotation', { method: 'POST' })).json();
+  const resp = await api('/api/calibrate/rotation', { method: 'POST' });
+  if (!resp.ok) { $('calOut').textContent = 'nicht gestartet'; return; }
+  const r = await resp.json();
   $('calOut').textContent = JSON.stringify(r, null, 1);
   if (r.ok && confirm(`Getriebeverhältnis ${r.gear_ratio.toFixed(4)} übernehmen?`))
     await api('/api/config/apply', { method: 'POST', body: JSON.stringify({ gear_ratio: r.gear_ratio }) });
+  refreshWorkerCfg();
 };
 $('btnCalOff').onclick = async () => {
   $('calOut').textContent = 'Offset-Kalibrierung läuft (>180°-Lauf)…';
-  const r = await (await api('/api/calibrate/offset', { method: 'POST' })).json();
+  const resp = await api('/api/calibrate/offset', { method: 'POST' });
+  if (!resp.ok) { $('calOut').textContent = 'nicht gestartet'; return; }
+  const r = await resp.json();
   $('calOut').textContent = JSON.stringify(r, null, 1);
   if (r.ok && confirm(`Offsets übernehmen (Residuum ${r.residual_mm.toFixed(1)} mm)?`))
     await api('/api/config/apply', { method: 'POST', body: JSON.stringify({
       angle_offset: r.angle_offset, model_y_offset: r.model_y_offset, model_z_offset: r.model_z_offset }) });
+  refreshWorkerCfg();
 };
 
 function applyViewMode() {
@@ -144,8 +195,9 @@ function updateLidarHealth(s) {
 // --- Status-Polling ---------------------------------------------------
 async function poll() {
   try {
-    const s = await (await api('/api/status')).json();
+    const s = await (await rawFetch('/api/status')).json();
     const b = $('state'); b.textContent = s.state;
+    $('posBanner').classList.toggle('hidden', !s.position_lost);
     // Scan-Liste nachladen, sobald ein Lauf (Scan/Kalibrierung) fertig ist
     if (s.state === 'idle' && lastState && lastState !== 'idle' && lastState !== 'lidar_only') refreshScans();
     lastState = s.state;
@@ -162,7 +214,7 @@ async function poll() {
     updateLidarHealth(s);
   } catch (e) { /* offline */ }
   try {
-    const sys = await (await api('/api/system/stats')).json();
+    const sys = await (await rawFetch('/api/system/stats')).json();
     if (sys.available) {
       $('stCpu').textContent = sys.cpu_percent.toFixed(1);
       $('stRam').textContent = sys.ram_percent.toFixed(1);
@@ -183,7 +235,7 @@ setInterval(poll, 700); poll();
 
 // --- Scan-Liste -------------------------------------------------------
 async function refreshScans() {
-  const scans = await (await api('/api/scans')).json();
+  const scans = await (await rawFetch('/api/scans')).json();
   const ul = $('scanList'); ul.innerHTML = '';
   for (const s of scans) {
     const qa  = (s.qa && s.qa.status) || '';
@@ -234,8 +286,16 @@ async function loadScanInto3D(scanId) {
   applyViewMode();
   $('stPts').textContent = 'lädt …';
   try {
-    const r = await api(`/api/scans/${scanId}/pointcloud`);
-    if (!r.ok) { alert('Punktwolke nicht gefunden.'); $('stPts').textContent = '0'; return; }
+    await refreshWorkerCfg();                      // aktuelle Offsets verwenden
+    const raw = await rawFetch(`/api/scans/${scanId}/raw`);
+    if (raw.ok) {                                  // Browser rechnet aus den Rohdaten
+      const buf = await raw.arrayBuffer();
+      worker.postMessage({ type: 'rawScan', buf, scanId }, [buf]);
+      return;
+    }
+    // Fallback: auf dem Pi gespeicherte Punktwolke (ältere Scans ohne Rohdaten)
+    const r = await rawFetch(`/api/scans/${scanId}/pointcloud`);
+    if (!r.ok) { toast('Für diesen Scan gibt es weder Rohdaten noch Punktwolke.'); $('stPts').textContent = '0'; return; }
     // Kompakter Binär-Buffer: uint32 n | float32[n*3] xyz | uint8[n] Intensität
     const buf = await r.arrayBuffer();
     const n = new Uint32Array(buf, 0, 1)[0];
@@ -252,9 +312,14 @@ async function loadScanInto3D(scanId) {
   } catch (e) {
     console.error(e);
     $('stPts').textContent = '0';
-    alert('Fehler beim Laden der Punktwolke: ' + e);
+    toast('Fehler beim Laden der Punktwolke: ' + e);
   }
 }
 
 $('btnRefresh').onclick = refreshScans;
+$('btnConfirmHome').onclick = async () => {
+  if (!confirm('Steht der Drehkopf in der Ausgangslage (Startposition des Scans)?')) return;
+  const r = await api('/api/stepper/confirm_home', { method: 'POST' });
+  if (r.ok) toast('Ausgangslage übernommen.', 'info');
+};
 refreshScans();

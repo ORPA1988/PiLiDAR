@@ -168,3 +168,12 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   line-height: 1;
 }
 .btn-del:hover { color: var(--danger); }
+
+/* Positionssperre und Meldungen */
+.banner { background: #3a2f12; color: var(--warn); padding: 8px 14px; display: flex; gap: 12px;
+          align-items: center; justify-content: space-between; font-size: 14px; }
+#toast { position: fixed; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 6px;
+         z-index: 50; max-width: 420px; }
+.toast { padding: 8px 12px; border-radius: 6px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+.toast.error { background: #3a1715; color: #ffb4ab; }
+.toast.info { background: #16341f; color: #b7f5c4; }
