@@ -305,9 +305,16 @@ const FloorPlan = (() => {
     const zLo = opts.zLo ?? Math.min(0.10, zHi - 0.4);
     const cell = opts.cell ?? 0.02;
     const occ = verticalCells(chunks, zLo, zHi, cell);
-    let lines = mergeLines(ransacLines(occ, { tol: cell * 1.5 }));
+    const tol = opts.wallTol ?? 0.05;       // Wände sind durch Messrauschen/Doppelerfassung einige cm dick
+    let lines = mergeLines(ransacLines(occ, { tol }), { maxDist: 0.10 });
     if (opts.orthogonal !== false) lines = orthogonalize(lines);
-    const segs = segments(lines);
+    // Punkte je Gerade neu sammeln (breiteres Band): sonst zerfällt eine leicht krumme oder
+    // doppelt erfasste Wand in viele kurze Stücke, die als „zu kurz“ wegfallen
+    for (const l of lines) {
+      const band = occ.filter(q => Math.abs(-l.dy * (q[0] - l.mx) + l.dx * (q[1] - l.my)) < tol * 1.6);
+      if (band.length >= l.pts.length) l.pts = band;
+    }
+    const segs = segments(lines, { gap: 0.35, minLen: 0.4 });
     let length = 0; for (const s of segs) length += Math.hypot(s[2] - s[0], s[3] - s[1]);
     const stations = opts.stations && opts.stations.length ? opts.stations : [[0, 0]];
     const res = { segs, occ, zLo, zHi, ceiling, cell, wallLength: length, stations };

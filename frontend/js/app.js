@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261128e';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261128g';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -199,6 +199,59 @@ $('btnPng').onclick = () => {
   const a = document.createElement('a');
   a.href = $('view3d').toDataURL('image/png');
   a.download = `${currentScanId || 'pilidar'}_ansicht.png`; a.click();
+};
+
+// --- Bericht (eine HTML-Datei mit Maßen und Bildern) ------------------------
+$('btnReport').onclick = async () => {
+  if (!v3d.total) { toast('Erst einen Scan in 3D laden.'); return; }
+  const esc = t => String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+  const rows = [], img = [];
+  const id = currentScanId || 'live';
+  let meta = null;
+  try { meta = (await (await rawFetch('/api/scans')).json()).find(s => s.id === id) || null; } catch (e) { /* offline */ }
+  rows.push(['Scan', loadedScans.length > 1 ? loadedScans.join(', ') : id]);
+  if (meta) {
+    rows.push(['Aufgenommen', (meta.created || '').replace('T', ' ')]);
+    rows.push(['Ablauf', `Modus ${meta.mode}, ${meta.scan_angle}° in ${Math.round(meta.duration_s || 0)} s`]);
+    if (meta.qa) rows.push(['Prüfung', `${meta.qa.status}` + (typeof meta.qa.loop_closure_mm === 'number' ? `, Überlappung ${meta.qa.loop_closure_mm.toFixed(1)} mm` : '') +
+                           (meta.qa.messages && meta.qa.messages.length ? ` – ${meta.qa.messages.join('; ')}` : '')]);
+  }
+  const st = v3d.stats();
+  rows.push(['Punkte', st.points.toLocaleString('de-DE')]);
+  if (st.bbox) rows.push(['Ausdehnung', `${(st.bbox.max[0] - st.bbox.min[0]).toFixed(2)} × ${(st.bbox.max[1] - st.bbox.min[1]).toFixed(2)} × ${(st.bbox.max[2] - st.bbox.min[2]).toFixed(2)} m`]);
+  const cv = document.createElement('canvas');
+  try {                                               // Grundriss
+    const opts = loadedScans.length > 1 ? { stations: poses.slice(0, loadedScans.length).map(p => [p.tx, p.ty]) } : {};
+    const f = FloorPlan.compute(v3d, opts);
+    for (const line of FloorPlan.describe(f)) rows.push(['Grundriss', line]);
+    rows.push(['Wände', `${f.segs.length} Wandstücke, zusammen ${f.wallLength.toFixed(1)} m`]);
+    cv.width = 760; cv.height = 520; FloorPlan.draw(cv, f);
+    img.push(['Grundriss (nur senkrechte Flächen; blau = Umriss, gestrichelt = ergänzt; rot = Standort)', cv.toDataURL('image/png')]);
+    try {                                             // zwei Schnitte entlang der Wandrichtungen
+      for (const add of [0, 90]) {
+        const s = Section.compute(v3d, { dirDeg: (f.m.baseDeg || 0) + add, thick: 0.05 });
+        cv.width = 760; cv.height = 360; Section.draw(cv, s);
+        img.push([`Schnitt durch den Standort, Richtung ${((f.m.baseDeg || 0) + add).toFixed(0)}° (Raster 0,5 m)`, cv.toDataURL('image/png')]);
+      }
+    } catch (e) { /* kein Schnitt */ }
+  } catch (e) { rows.push(['Grundriss', 'nicht möglich: ' + e.message]); }
+  try {                                               // Flächen
+    const r = Surfaces.classify(v3d);
+    rows.push(['Gesehene Flächen', Surfaces.describe(r).join(' · ') || '–']);
+  } catch (e) { /* keine Flächen */ }
+  img.unshift(['3D-Ansicht (wie gerade eingestellt)', $('view3d').toDataURL('image/png')]);
+  const html = `<!doctype html><html lang="de"><meta charset="utf-8"><title>PiLiDAR Bericht ${esc(id)}</title>
+<style>body{font:14px system-ui,sans-serif;max-width:820px;margin:24px auto;color:#222}h1{font-size:20px}
+table{border-collapse:collapse;width:100%}td{border-bottom:1px solid #ddd;padding:4px 8px;vertical-align:top}
+td:first-child{white-space:nowrap;color:#555;width:150px}figure{margin:18px 0}img{max-width:100%;border:1px solid #ccc}
+figcaption{font-size:12px;color:#555}.note{font-size:12px;color:#666;margin-top:16px}</style>
+<h1>PiLiDAR – Bericht ${esc(id)}</h1>
+<table>${rows.map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td></tr>`).join('')}</table>
+${img.map(i => `<figure><img src="${i[1]}" alt=""><figcaption>${esc(i[0])}</figcaption></figure>`).join('')}
+<p class="note">Alle Maße aus der Punktwolke berechnet; es zählen nur vom Scanner gesehene Flächen. Erstellt ${new Date().toLocaleString('de-DE')}.</p></html>`;
+  FloorPlan.download(`bericht_${id}.html`, html, 'text/html');
+  window._lastReport = { rows, images: img.length, bytes: html.length };
+  toast('Bericht erstellt.', 'info');
 };
 
 // --- Schnittansicht --------------------------------------------------------
