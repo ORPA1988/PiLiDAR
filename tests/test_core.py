@@ -206,6 +206,22 @@ def test_mock_scan():
         if ctrl.state == "idle":
             break
         time.sleep(0.05)
+    # Projekt mit zwei Lagen speichern/lesen/löschen
+    sid = ctrl.store.list_scans()[0]["id"]
+    pr = ctrl.store.save_project("Test Projekt", {"scans": [
+        {"id": sid, "pose": {}}, {"id": sid, "pose": {"yaw_deg": 12.5, "tx": 1, "ty": -2, "tz": 0.1}, "rmse": 0.02}]})
+    assert pr["scans"][1]["pose"]["yaw_deg"] == 12.5
+    assert any(p["name"] == "Test Projekt" for p in ctrl.store.list_projects())
+    assert ctrl.store.load_project("Test Projekt")["scans"][1]["rmse"] == 0.02
+    for bad in ("../x", "", "a/b"):
+        try:
+            ctrl.store.save_project(bad, {"scans": [{"id": sid}]})
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Name {bad!r} angenommen")
+    ctrl.store.delete_project("Test Projekt")
+    assert ctrl.store.load_project("Test Projekt") is None
     st = ctrl.selftest()
     assert st["status"] in ("ok", "warn", "error") and len(st["checks"]) >= 5, st
     assert any("size_mb" in m for m in ctrl.store.list_scans())

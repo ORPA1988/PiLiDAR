@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127m';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127n';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -38,6 +38,10 @@ let viewMode = '2d';
 let totalPoints = 0;
 let lidarResDeg = 0;
 let lastState = null;  // für das automatische Nachladen der Scan-Liste
+let loadedScans = [];   // überlagerte Scans (Index = src = Farbe im Modus „Scan-Nummer“)
+let poses = [];         // Lage je Scan: {yaw [rad], tx, ty, tz [m]}  p' = Rz(yaw)·p + t
+let alignQ = [];        // Güte der Ausrichtung je Scan {overlap, rmse}
+const rawWaiters = new Map();   // src -> resolve, wenn der Worker einen Scan fertig gerechnet hat
 
 // Geometrie-Parameter für den Worker aus der aktuellen Konfiguration
 async function refreshWorkerCfg() {
@@ -75,6 +79,9 @@ worker.onmessage = (ev) => {
       : totalPoints.toLocaleString('de-DE');
   } else if (m.type === 'rawDone') {
     $('stPts').textContent = m.total.toLocaleString('de-DE');
+    v3d._flush();
+    const w = rawWaiters.get(m.src);
+    if (w) { rawWaiters.delete(m.src); w(); }
   } else if (m.type === 'exportData') {
     exportPLY(m.xyz, m.inten, m.total);
   }
@@ -159,6 +166,7 @@ applyViewMode();  // Anfangszustand setzen (3D-Achsen-Overlay korrekt aus-/einbl
 function clearView() {
   v2d.clear(); v3d.clear(); worker.postMessage({ type: 'clear' });
   totalPoints = 0; $('stPts').textContent = '0';
+  loadedScans = []; poses = []; alignQ = []; $('alignInfo').textContent = '';
 }
 $('btnClear').onclick = clearView;
 // PLY: sichtbare Punkte (Höhenschnitt beachtet) direkt aus dem Viewer
@@ -207,6 +215,7 @@ let floorRes = null;
 function floorCompute(opts) {
   try {
     const t0 = performance.now();
+    if (loadedScans.length > 1) opts = { ...opts, stations: poses.slice(0, loadedScans.length).map(p => [p.tx, p.ty]) };
     floorRes = FloorPlan.compute(v3d, opts);
     FloorPlan.draw($('floorCanvas'), floorRes);
     $('floorLo').value = floorRes.zLo.toFixed(2); $('floorHi').value = floorRes.zHi.toFixed(2);
@@ -367,13 +376,12 @@ async function refreshScans() {
 }
 // Gespeicherten Scan in die 3D-Ansicht laden
 let currentScanId = null;   // zuletzt in 3D geladener Scan (für Dateinamen)
-let loadedScans = [];       // überlagerte Scans (Index = Farbe im Modus „Scan-Nummer“)
-async function loadScanInto3D(scanId, add = false) {
+async function loadScanInto3D(scanId, add = false, quiet = false) {
   currentScanId = scanId;
-  if (!add || !loadedScans.length) { clearView(); loadedScans = []; }
+  if (!add || !loadedScans.length) clearView();
   const src = loadedScans.length;
-  loadedScans.push(scanId);
-  if (add) toast(`Scan ${scanId} überlagert (Nr. ${src}). Farbe „Scan-Nummer“ trennt die Scans.`, 'info');
+  loadedScans.push(scanId); poses[src] = { yaw: 0, tx: 0, ty: 0, tz: 0 }; alignQ[src] = null;
+  if (add && !quiet) toast(`Scan ${scanId} überlagert (Nr. ${src}). Mit „Scans ausrichten“ passend zueinander legen.`, 'info');
   // auf 3D-Ansicht umschalten
   const radio3d = document.querySelector('input[name="view"][value="3d"]');
   radio3d.checked = true;
@@ -384,7 +392,7 @@ async function loadScanInto3D(scanId, add = false) {
     const raw = await rawFetch(`/api/scans/${scanId}/raw`);
     if (raw.ok) {                                  // Browser rechnet aus den Rohdaten
       const buf = await raw.arrayBuffer();
-      worker.postMessage({ type: 'rawScan', buf, scanId, src }, [buf]);
+      await new Promise(res => { rawWaiters.set(src, res); worker.postMessage({ type: 'rawScan', buf, scanId, src }, [buf]); });
       return;
     }
     // Fallback: auf dem Pi gespeicherte Punktwolke (ältere Scans ohne Rohdaten)
@@ -399,8 +407,9 @@ async function loadScanInto3D(scanId, add = false) {
     const CHUNK = 200000;  // Punkte pro Block
     for (let i = 0; i < n; i += CHUNK) {
       const m = Math.min(CHUNK, n - i);
-      v3d.addPoints(xyz.slice(i * 3, (i + m) * 3), inten.slice(i, i + m));
+      v3d.addPoints(xyz.slice(i * 3, (i + m) * 3), inten.slice(i, i + m), null, src);
     }
+    v3d._flush();
     totalPoints = n;
     $('stPts').textContent = totalPoints.toLocaleString('de-DE');
   } catch (e) {
@@ -437,6 +446,111 @@ async function runSelftest(quiet) {
 }
 $('btnSelftest').onclick = () => runSelftest(false);
 setTimeout(() => runSelftest(true), 1500);   // beim Laden nur Probleme melden
+
+// --- Mehrere Scans: Ausrichtung und Projekte -------------------------------
+const regWorker = new Worker(`js/registration.worker.js?v=${ASSET_VERSION}`);
+let regId = 0;
+function regRun(ref, mov, opts, label) {
+  return new Promise((resolve, reject) => {
+    const id = ++regId;
+    regWorker.onmessage = (ev) => {
+      const m = ev.data; if (m.id !== id) return;
+      if (m.type === 'progress') $('alignInfo').textContent = `${label}: ${m.phase} … ${Math.round(m.f * 100)} %`;
+      else if (m.type === 'result') resolve(m.res);
+      else reject(new Error(m.error));
+    };
+    regWorker.postMessage({ type: 'align', id, ref, mov, opts }, [ref.buffer, mov.buffer]);
+  });
+}
+// delta ∘ pose
+function composePose(d, p) {
+  const c = Math.cos(d.yaw), s = Math.sin(d.yaw);
+  return { yaw: d.yaw + p.yaw, tx: c * p.tx - s * p.ty + d.tx, ty: s * p.tx + c * p.ty + d.ty, tz: p.tz + d.tz };
+}
+function describePose(k) {
+  const p = poses[k], q = alignQ[k], deg = ((p.yaw * 180 / Math.PI) % 360 + 540) % 360 - 180;
+  let t = `Nr. ${k}: ${deg.toFixed(1)}°, (${p.tx.toFixed(2)} | ${p.ty.toFixed(2)} | ${p.tz.toFixed(2)}) m`;
+  if (q) {
+    t += `, Überdeckung ${Math.round(q.overlap * 100)} %` + (q.rmse ? `, Abweichung ${(q.rmse * 100).toFixed(1)} cm` : '');
+    if (q.overlap < 0.3) t += ' – unsicher';
+    else if (q.second && q.overlap - q.second < 0.05) t += ' – mehrdeutig, bitte prüfen';
+  }
+  return t;
+}
+function showAlignInfo() {
+  $('alignInfo').innerHTML = loadedScans.length > 1
+    ? loadedScans.map((id, k) => k ? describePose(k) : `Nr. 0: ${id} (Bezug)`).join('<br>') : '';
+}
+$('btnAlign').onclick = async () => {
+  if (loadedScans.length < 2) { toast('Erst mindestens zwei Scans laden (weitere mit „+“ in der Scanliste).'); return; }
+  const btn = $('btnAlign'); btn.disabled = true;
+  try {
+    for (let k = 1; k < loadedScans.length; k++) {
+      const ref = Registration.voxelSample(v3d.chunks, s => s < k, 0.05, 250000);
+      const mov = Registration.voxelSample(v3d.chunks, s => s === k, 0.05);
+      const r = await regRun(ref, mov, {}, `Scan ${k}/${loadedScans.length - 1}`);
+      v3d.transformSource(k, r.yaw, r.tx, r.ty, r.tz);
+      poses[k] = composePose(r, poses[k]);
+      alignQ[k] = { overlap: r.overlap, rmse: r.rmse, second: r.second };
+      console.info('Ausrichtung', k, r);
+    }
+    $('colorMode').value = '5'; v3d.setColorMode(5); v3d.setView('top');
+    showAlignInfo();
+    const weak = alignQ.slice(1).some(q => q && q.overlap < 0.3);
+    toast(weak ? 'Ausgerichtet, aber mindestens ein Scan überdeckt sich kaum – Ergebnis prüfen.' : 'Scans ausgerichtet.', weak ? 'error' : 'info');
+  } catch (e) {
+    toast('Ausrichtung fehlgeschlagen: ' + e.message); $('alignInfo').textContent = '';
+  } finally { btn.disabled = false; }
+};
+
+async function refreshProjects() {
+  try {
+    const list = await (await rawFetch('/api/projects')).json();
+    const sel = $('projSel'), cur = sel.value;
+    sel.innerHTML = '<option value="">– Projekt –</option>';
+    for (const p of list) {
+      const o = document.createElement('option');
+      o.value = p.name; o.textContent = `${p.name} (${p.scans.length})`; sel.appendChild(o);
+    }
+    if (list.some(p => p.name === cur)) sel.value = cur;
+  } catch (e) { /* offline */ }
+}
+$('btnProjSave').onclick = async () => {
+  const name = $('projName').value.trim();
+  if (!loadedScans.length) { toast('Keine gespeicherten Scans geladen.'); return; }
+  if (!name) { toast('Bitte einen Projektnamen eingeben.'); return; }
+  const body = { scans: loadedScans.map((id, k) => ({ id,
+    pose: { yaw_deg: poses[k].yaw * 180 / Math.PI, tx: poses[k].tx, ty: poses[k].ty, tz: poses[k].tz },
+    ...(alignQ[k] ? { rmse: alignQ[k].rmse, overlap: alignQ[k].overlap } : {}) })) };
+  const r = await api(`/api/projects/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(body) });
+  if (r.ok) { toast(`Projekt „${name}“ gespeichert.`, 'info'); await refreshProjects(); $('projSel').value = name; }
+};
+$('btnProjLoad').onclick = async () => {
+  const name = $('projSel').value; if (!name) return;
+  const r = await api(`/api/projects/${encodeURIComponent(name)}`); if (!r.ok) return;
+  const pr = await r.json();
+  clearView();
+  for (let k = 0; k < pr.scans.length; k++) {
+    const s = pr.scans[k];
+    $('alignInfo').textContent = `Lade ${k + 1}/${pr.scans.length}: ${s.id} …`;
+    await loadScanInto3D(s.id, k > 0, true);
+    const p = { yaw: (s.pose.yaw_deg || 0) * Math.PI / 180, tx: s.pose.tx || 0, ty: s.pose.ty || 0, tz: s.pose.tz || 0 };
+    if (p.yaw || p.tx || p.ty || p.tz) v3d.transformSource(k, p.yaw, p.tx, p.ty, p.tz);
+    poses[k] = p;
+    alignQ[k] = typeof s.overlap === 'number' ? { overlap: s.overlap, rmse: s.rmse } : null;
+  }
+  currentScanId = name.replace(/\s+/g, '_');
+  $('projName').value = name;
+  if (pr.scans.length > 1) { $('colorMode').value = '5'; v3d.setColorMode(5); }
+  v3d.setView('top'); showAlignInfo();
+};
+$('btnProjDel').onclick = async () => {
+  const name = $('projSel').value; if (!name) return;
+  if (!confirm(`Projekt „${name}“ löschen? Die Scans selbst bleiben erhalten.`)) return;
+  const r = await api(`/api/projects/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  if (r.ok) refreshProjects();
+};
+refreshProjects();
 
 $('btnRefresh').onclick = refreshScans;
 $('btnConfirmHome').onclick = async () => {

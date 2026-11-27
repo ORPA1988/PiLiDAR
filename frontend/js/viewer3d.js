@@ -299,6 +299,29 @@ class Viewer3D {
     this._updateLegend();
   }
 
+  /* Punkte eines Scans (src) in der Lage ändern: p' = Rz(yaw)·p + t (für die Ausrichtung) */
+  transformSource(src, yaw, tx, ty, tz = 0) {
+    this._flush();
+    const gl = this.gl, c = Math.cos(yaw), s = Math.sin(yaw);
+    for (const ch of this.chunks) {
+      let hit = false;
+      for (let j = 0, i = 0; j < ch.src.length; j++, i += 3) {
+        if (ch.src[j] !== src) continue;
+        const x = ch.pos[i], y = ch.pos[i + 1];
+        ch.pos[i] = c * x - s * y + tx; ch.pos[i + 1] = s * x + c * y + ty; ch.pos[i + 2] += tz;
+        hit = true;
+      }
+      if (hit) { gl.bindBuffer(gl.ARRAY_BUFFER, ch.posBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, ch.pos); }
+    }
+    const b = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity], rmax: 0 };
+    for (const ch of this.chunks) for (let i = 0; i < ch.pos.length; i += 3) {
+      for (let k = 0; k < 3; k++) { const v = ch.pos[i + k]; if (v < b.min[k]) b.min[k] = v; if (v > b.max[k]) b.max[k] = v; }
+      const r = ch.pos[i] ** 2 + ch.pos[i + 1] ** 2 + ch.pos[i + 2] ** 2; if (r > b.rmax) b.rmax = r;
+    }
+    this.bbox = this.chunks.length ? b : null;
+    this.picks = []; this._showMeasure(); this._updateLegend();
+  }
+
   /* Statistik für die Anzeige: Punktzahl, Ausdehnung [m] */
   stats() {
     const b = this.bbox;

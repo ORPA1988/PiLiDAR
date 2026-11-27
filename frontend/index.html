@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PiLiDAR 2.0</title>
-  <link rel="stylesheet" href="css/style.css?v=20261127m" />
+  <link rel="stylesheet" href="css/style.css?v=20261127n" />
 </head>
 <body>
   <header>
@@ -115,6 +115,22 @@
       </div>
 
       <div class="group">
+        <strong>Mehrere Scans</strong>
+        <div class="hint">Weitere Scans in der Liste mit „+“ dazuladen, dann ausrichten. Scanner waagerecht, die Scans müssen sich überschneiden.</div>
+        <button id="btnAlign" class="secondary" title="Dazugeladene Scans automatisch an den ersten anpassen (Drehung + Verschiebung)">&#129513; Scans ausrichten</button>
+        <div id="alignInfo" class="hint"></div>
+        <div class="btnrow">
+          <input id="projName" type="text" placeholder="Projektname" style="width:120px" />
+          <button id="btnProjSave" class="secondary" title="Geladene Scans mit ihrer Lage auf dem Pi speichern">Speichern</button>
+        </div>
+        <div class="btnrow">
+          <select id="projSel" style="max-width:140px"><option value="">– Projekt –</option></select>
+          <button id="btnProjLoad" class="secondary">Laden</button>
+          <button id="btnProjDel" class="secondary" title="Projekt löschen (Scans bleiben erhalten)">&#128465;</button>
+        </div>
+      </div>
+
+      <div class="group">
         <strong>Export</strong>
         <label title="Je Würfel nur ein Punkt – kleinere Dateien, gleichmäßige Dichte">Ausdünnen
           <select id="thinCell"><option value="0">aus</option><option value="0.005">5 mm</option>
@@ -162,10 +178,11 @@
     </section>
   </main>
 
-  <script src="js/viewer2d.js?v=20261127m"></script>
-  <script src="js/viewer3d.js?v=20261127m"></script>
-  <script src="js/export.js?v=20261127m"></script>
-  <script src="js/floorplan.js?v=20261127m"></script>
-  <script src="js/app.js?v=20261127m"></script>
+  <script src="js/viewer2d.js?v=20261127n"></script>
+  <script src="js/viewer3d.js?v=20261127n"></script>
+  <script src="js/export.js?v=20261127n"></script>
+  <script src="js/floorplan.js?v=20261127n"></script>
+  <script src="js/registration.js?v=20261127n"></script>
+  <script src="js/app.js?v=20261127n"></script>
 </body>
 </html>

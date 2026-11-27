@@ -196,7 +196,8 @@ const FloorPlan = (() => {
     const g = 0.05, b = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
     for (const p of res.occ) { b.x0 = Math.min(b.x0, p[0]); b.x1 = Math.max(b.x1, p[0]); b.y0 = Math.min(b.y0, p[1]); b.y1 = Math.max(b.y1, p[1]); }
     if (isFinite(b.x0)) {
-      b.x0 = Math.min(b.x0, 0) - g; b.y0 = Math.min(b.y0, 0) - g; b.x1 = Math.max(b.x1, 0) + g; b.y1 = Math.max(b.y1, 0) + g;
+      for (const st of res.stations) { b.x0 = Math.min(b.x0, st[0]); b.y0 = Math.min(b.y0, st[1]); b.x1 = Math.max(b.x1, st[0]); b.y1 = Math.max(b.y1, st[1]); }
+      b.x0 -= g; b.y0 -= g; b.x1 += g; b.y1 += g;
       const W = Math.ceil((b.x1 - b.x0) / g) + 1, H = Math.ceil((b.y1 - b.y0) / g) + 1;
       if (W * H < 4e6) {
         const wall = new Uint8Array(W * H), seen = new Uint8Array(W * H);
@@ -211,9 +212,11 @@ const FloorPlan = (() => {
           const L = Math.hypot(s[2] - s[0], s[3] - s[1]), k = Math.ceil(L / (g / 2));
           for (let i = 0; i <= k; i++) mark(s[0] + (s[2] - s[0]) * i / k, s[1] + (s[3] - s[1]) * i / k);
         }
-        let sx0 = Math.floor((0 - b.x0) / g), sy0 = Math.floor((0 - b.y0) / g);
-        const stack = [sy0 * W + sx0]; let cnt = 0, open = false;
-        if (wall[stack[0]]) stack.length = 0;
+        const stack = []; let cnt = 0, open = false;         // von jedem Scannerstandort aus füllen
+        for (const st of res.stations) {
+          const k = Math.floor((st[1] - b.y0) / g) * W + Math.floor((st[0] - b.x0) / g);
+          if (!wall[k]) stack.push(k);
+        }
         while (stack.length) {
           const i = stack.pop(); if (seen[i] || wall[i]) continue;
           seen[i] = 1; cnt++;
@@ -244,7 +247,8 @@ const FloorPlan = (() => {
     if (opts.orthogonal !== false) lines = orthogonalize(lines);
     const segs = segments(lines);
     let length = 0; for (const s of segs) length += Math.hypot(s[2] - s[0], s[3] - s[1]);
-    const res = { segs, occ, zLo, zHi, ceiling, cell, wallLength: length };
+    const stations = opts.stations && opts.stations.length ? opts.stations : [[0, 0]];
+    const res = { segs, occ, zLo, zHi, ceiling, cell, wallLength: length, stations };
     res.m = metrics(res, chunks, bbox);
     return res;
   }
@@ -274,7 +278,8 @@ const FloorPlan = (() => {
     const bb = bounds(res);                                   // Beschriftung unter dem Plan
     describe(res).forEach((line, k) => out.push('0', 'TEXT', '8', 'MASSE', '10', bb.x0.toFixed(3),
       '20', (bb.y0 - 0.25 - k * 0.15).toFixed(3), '30', '0.0', '40', '0.10', '1', line.replace(/[²×≥]/g, c => ({ '²': '2', '×': 'x', '≥': '>=' })[c])));
-    out.push('0', 'POINT', '8', 'MASSE', '10', '0.0', '20', '0.0', '30', '0.0');   // Scannerstandort
+    for (const st of res.stations)                            // Scannerstandorte
+      out.push('0', 'POINT', '8', 'MASSE', '10', st[0].toFixed(3), '20', st[1].toFixed(3), '30', '0.0');
     out.push('0', 'ENDSEC', '0', 'EOF');
     return out.join('\r\n') + '\r\n';
   }
@@ -308,7 +313,8 @@ const FloorPlan = (() => {
     for (const p of res.occ) ctx.fillRect(X(p[0]), Y(p[1]), Math.max(1, res.cell * s), Math.max(1, res.cell * s));
     ctx.strokeStyle = '#000'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
     for (const g of res.segs) { ctx.beginPath(); ctx.moveTo(X(g[0]), Y(g[1])); ctx.lineTo(X(g[2]), Y(g[3])); ctx.stroke(); }
-    ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(X(0), Y(0), 5, 0, 7); ctx.fill();   // Scannerstandort
+    ctx.fillStyle = '#c0392b';                                // Scannerstandorte
+    for (const st of res.stations) { ctx.beginPath(); ctx.arc(X(st[0]), Y(st[1]), 5, 0, 7); ctx.fill(); }
     ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(20, H - 8); ctx.lineTo(20 + s, H - 8); ctx.stroke();
     ctx.fillStyle = '#333'; ctx.font = '12px system-ui'; ctx.fillText('1 m', 24 + s, H - 4);
   }

@@ -215,6 +215,66 @@ class ScanStore:
         return xyz, arr["r"].copy()
 
     # ------------------------------------------------------------------
+    # --- Projekte: mehrere Scans mit Lage zueinander ----------------------
+    # projects/<name>.json neben dem Scan-Ordner:
+    #   {"name", "updated", "note", "scans": [{"id", "pose": {"yaw_deg","tx","ty","tz"}, ...}]}
+    _PROJ_OK = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-. äöüÄÖÜß")
+
+    @property
+    def project_dir(self) -> Path:
+        return self.base.parent / "projects"
+
+    def _project_path(self, name: str) -> Path:
+        name = str(name).strip()
+        if not name or len(name) > 60 or not set(name) <= self._PROJ_OK or name.startswith("."):
+            raise ValueError("Ungültiger Projektname (Buchstaben, Ziffern, Leerzeichen, _ - .)")
+        return self.project_dir / f"{name}.json"
+
+    def list_projects(self) -> list[dict]:
+        out = []
+        if self.project_dir.exists():
+            for f in sorted(self.project_dir.glob("*.json")):
+                try:
+                    d = json.loads(f.read_text(encoding="utf-8"))
+                    out.append({"name": d.get("name", f.stem), "updated": d.get("updated"),
+                                "scans": [s.get("id") for s in d.get("scans", [])]})
+                except Exception:
+                    continue
+        return out
+
+    def load_project(self, name: str) -> dict | None:
+        p = self._project_path(name)
+        return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+
+    def save_project(self, name: str, data: dict) -> dict:
+        import time as _t
+        p = self._project_path(name)
+        scans = []
+        for s in data.get("scans", []):
+            sid = str(s.get("id", ""))
+            if not sid or not self.scan_dir(sid).is_dir():
+                raise ValueError(f"Scan nicht gefunden: {sid}")
+            pose = s.get("pose") or {}
+            entry = {"id": sid, "pose": {k: float(pose.get(k, 0.0)) for k in ("yaw_deg", "tx", "ty", "tz")}}
+            for k in ("rmse", "overlap"):
+                if isinstance(s.get(k), (int, float)):
+                    entry[k] = float(s[k])
+            scans.append(entry)
+        if not scans:
+            raise ValueError("Projekt ohne Scans")
+        out = {"name": name.strip(), "updated": _t.strftime("%Y-%m-%d %H:%M:%S"),
+               "note": str(data.get("note", ""))[:500], "scans": scans}
+        self.project_dir.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(out, indent=1, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(p)
+        return out
+
+    def delete_project(self, name: str) -> None:
+        p = self._project_path(name)
+        if p.exists():
+            p.unlink()
+
     def delete_scan(self, scan_id: str) -> None:
         import shutil
         d = self.scan_dir(scan_id)

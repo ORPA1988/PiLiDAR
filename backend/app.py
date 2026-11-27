@@ -237,6 +237,40 @@ async def api_scan_delete(scan_id: str):
     return {"ok": True}
 
 
+@app.get("/api/projects")
+async def api_projects():
+    return controller.store.list_projects()
+
+
+@app.get("/api/projects/{name}")
+async def api_project_get(name: str):
+    try:
+        p = controller.store.load_project(name)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"ok": False, "error": str(exc)})
+    if p is None:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "Projekt nicht gefunden"})
+    return p
+
+
+@app.put("/api/projects/{name}")
+async def api_project_put(name: str, payload: dict = Body(...)):
+    """Mehrere Scans mit ihrer Lage (Drehung um z, Verschiebung) als Projekt speichern."""
+    try:
+        return {"ok": True, "project": controller.store.save_project(name, payload)}
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"ok": False, "error": str(exc)})
+
+
+@app.delete("/api/projects/{name}")
+async def api_project_delete(name: str):
+    try:
+        controller.store.delete_project(name)
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"ok": False, "error": str(exc)})
+    return {"ok": True}
+
+
 @app.post("/api/scans/{scan_id}/annotation")
 async def api_scan_annotation(scan_id: str, payload: dict = Body(...)):
     controller.store.update_annotation(scan_id, str(payload.get("text", "")))

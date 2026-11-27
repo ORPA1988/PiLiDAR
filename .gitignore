@@ -6,6 +6,8 @@ venv/
 
 # Scan-Daten / Laufzeit
 scans/
+projects/
+tests/projects/
 tests/_scans_tmp/
 tests/_scans_dbg/
 

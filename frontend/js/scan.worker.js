@@ -84,7 +84,7 @@ self.onmessage = (ev) => {
       const m = Math.min(STEP, r.n - f);
       emit(transformBlock(r.z, r.a, r.d, r.it, f, m), { progress: (f + m) / r.n, scanId: msg.scanId, src: msg.src || 0 });
     }
-    self.postMessage({ type: 'rawDone', scanId: msg.scanId, total: totalPoints });
+    self.postMessage({ type: 'rawDone', scanId: msg.scanId, src: msg.src || 0, total: totalPoints });
   } else if (msg.type === 'clear') {
     allXYZ = []; allINT = []; totalPoints = 0;
   } else if (msg.type === 'export') {
