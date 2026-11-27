@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127y';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127z';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -668,7 +668,9 @@ const offVals = () => ({ angle_offset: +$('offAng').value, model_y_offset: +$('o
                          model_z_offset: +$('offZ').value || 0, z_scale: +$('offK').value || 1,
                          half_yaw: +$('offH').value || 0 });
 // Naht-Ansicht: Anfang (orange) und Ende (türkis) des Scans mit den Werten aus den Feldern
-async function showSeam(reuse) {
+let seamMode = 'seam';   // 'seam' = Anfang/Ende, 'halves' = ganzer Scan, vordere/hintere LiDAR-Hälfte
+async function showSeam(reuse, mode) {
+  if (mode) seamMode = mode;
   const id = $('offScan').value; if (!id) { toast('Kein Scan mit Überlappung vorhanden.'); return; }
   const meta = (await (await rawFetch('/api/scans')).json()).find(s => s.id === id) || {};
   const sa = meta.scan_angle || 184, ov = meta.overlap_deg || 4;
@@ -686,9 +688,17 @@ async function showSeam(reuse) {
                        model_z: v.model_z_offset, z_scale: v.z_scale, half_yaw: v.half_yaw });
   document.querySelector('input[name="view"][value="3d"]').checked = true; applyViewMode();
   await new Promise(res => { rawWaiters.set(0, res);
-    worker.postMessage({ type: 'rawScan', buf: buf.slice(0), scanId: id, src: 0, seam: { ov, sa } }); });
+    worker.postMessage({ type: 'rawScan', buf: buf.slice(0), scanId: id, src: 0,
+      ...(seamMode === 'halves' ? { halves: { stride: 2 } } : { seam: { ov, sa } }) }); });
   $('colorMode').value = '5'; v3d.setColorMode(5);
   if (!keepView) v3d.setView('top');
+  if (seamMode === 'halves') {
+    $('offOut').innerHTML = `Ganzer Scan ${id}: orange = vordere, türkis = hintere Hälfte des LiDAR. ` +
+      (sa >= 350 ? 'Beide Hälften sehen den ganzen Raum – Wände und Kanten müssen überall deckungsgleich sein. '
+                 : `Achtung: bei ${sa}° sehen die Hälften verschiedene Raumteile und überdecken sich nur an der Naht. `) +
+      'Werte ändern, die Ansicht rechnet sofort neu; „Mit Scan prüfen“ gibt die Abweichung als Zahl.';
+    return;
+  }
   $('offOut').innerHTML = `Naht von ${id}: orange = Anfang (0…${ov}°), türkis = Ende (${sa - ov}…${sa}°). ` +
     'Werte ändern, die Ansicht rechnet sofort neu; passt es, „Übernehmen“. „Ansicht leeren“ beendet die Naht-Ansicht.';
 }
@@ -697,7 +707,8 @@ for (const id of ['offAng', 'offY', 'offZ', 'offK', 'offH']) $(id).addEventListe
   if (!seamView) return;
   clearTimeout(seamTimer); seamTimer = setTimeout(() => showSeam(true), 350);
 });
-$('btnSeam').onclick = () => showSeam(false);
+$('btnSeam').onclick = () => showSeam(false, 'seam');
+$('btnHalves').onclick = () => showSeam(false, 'halves');
 $('btnOffCheck').onclick = async () => {
   const id = $('offScan').value; if (!id) { toast('Kein Scan mit Überlappung vorhanden.'); return; }
   $('offOut').textContent = 'rechnet …';
@@ -707,7 +718,9 @@ $('btnOffCheck').onclick = async () => {
   const verdict = t === null ? '' : t <= 15 ? ' – Winkel gut' : t <= 30 ? ' – Winkel mäßig' : ' – Winkel passt nicht';
   $('offOut').innerHTML = `Überlappung mit diesen Werten: <b>${t ?? '–'} mm</b>${verdict}<br>` +
     `mit dem aktuellen Winkel (${(+j.current.angle_offset).toFixed(2)}°): ${c ?? '–'} mm<br>` +
-    'y und z lassen sich so nicht prüfen (Mechanik messen: y = Abstand Scan-Ebene – Drehachse).';
+    'y und z lassen sich an der Naht nicht prüfen.' +
+    (j.halves_test_mm != null ? `<br><b>Ganzer Scan, vordere gegen hintere Hälfte: ${j.halves_test_mm} mm</b> ` +
+      `(gespeicherte Werte: ${j.halves_current_mm} mm) – kleiner ist besser, bewertet auch y und Hälften-Verdrehung.` : '');
 };
 $('btnOffApply').onclick = async () => {
   const v = offVals();

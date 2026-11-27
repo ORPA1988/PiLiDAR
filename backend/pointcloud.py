@@ -77,7 +77,7 @@ def select_frames(arrays: dict, z_lo: float, z_hi: float) -> dict:
 
 def build_pointcloud(frames, angle_offset: float, position_offset,
                      dist_min_mm: float, dist_max_mm: float, z_scale: float = 1.0,
-                     half_yaw: float = 0.0):
+                     half_yaw: float = 0.0, half_select: int = 0):
     """frames: Liste von dicts (angles[], distances[], intensities[], z_angle)
     oder dict von Arrays (siehe frames_to_arrays).
 
@@ -105,4 +105,7 @@ def build_pointcloud(frames, angle_offset: float, position_offset,
     th = np.radians(-zz[m] * float(z_scale) + half)   # z_scale: Drehfaktor
     c, s_ = np.cos(th), np.sin(th)
     out = np.column_stack((pts[:, 0] * c - pts[:, 1] * s_, pts[:, 0] * s_ + pts[:, 1] * c, pts[:, 2]))
+    if half_select:   # nur vordere (+1) oder hintere (−1) Fächerhälfte (für die Hälften-Prüfung)
+        hm = (pts[:, 0] > 0) if half_select > 0 else (pts[:, 0] <= 0)   # Versatz hat x = 0 -> Vorzeichen gültig
+        return out[hm], inten[m][hm]
     return out, inten[m]

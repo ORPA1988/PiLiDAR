@@ -20,7 +20,7 @@ const D2R = Math.PI / 180;
 
 /* Frames [f0, f0+n) aus getypten Arrays transformieren.
  * z: Float32Array(N), a: Float32Array(N*12), d: Uint16Array(N*12), it: Uint8Array(N*12) */
-function transformBlock(z, a, d, it, f0, n) {
+function transformBlock(z, a, d, it, f0, n, halfSel = 0, stride = 1) {   // halfSel: +1 vorn, −1 hinten, 0 alle
   const ao = cfg.angle_offset * D2R, caO = Math.cos(ao), saO = Math.sin(ao);
   const oy = cfg.model_y, oz = cfg.model_z, dmin = cfg.dist_min, dmax = cfg.dist_max;
   const edge = cfg.edge_filter, N = d.length;
@@ -28,7 +28,7 @@ function transformBlock(z, a, d, it, f0, n) {
   const inten = new Float32Array(n * 12);
   const za = new Float32Array(n * 12);              // Drehwinkel je Punkt (Diagnose-Farbe)
   let k = 0;
-  for (let f = f0; f < f0 + n; f++) {
+  for (let f = f0; f < f0 + n; f += stride) {
     // Drehwinkel; die beiden Fächerhälften (px > 0 / < 0) um ±half_yaw/2 gegeneinander verdreht
     const zr0 = -z[f] * cfg.z_scale * D2R, hy = cfg.half_yaw * 0.5 * D2R;
     const czF = Math.cos(zr0 + hy), szF = Math.sin(zr0 + hy), czB = Math.cos(zr0 - hy), szB = Math.sin(zr0 - hy);
@@ -46,6 +46,7 @@ function transformBlock(z, a, d, it, f0, n) {
       const px0 = dd * Math.cos(ang), pz0 = -dd * Math.sin(ang);   // 270° -> +Z (oben)
       const px = px0 * caO + pz0 * saO;                            // Y-Rotation
       const pz = -px0 * saO + pz0 * caO + oz;
+      if (halfSel && (px > 0) !== (halfSel > 0)) continue;
       const py = oy, cz = px > 0 ? czF : czB, sz = px > 0 ? szF : szB;
       xyz[k * 3] = (px * cz - py * sz) / 1000;                     // Z-Rotation, mm -> m
       xyz[k * 3 + 1] = (px * sz + py * cz) / 1000;
@@ -92,6 +93,15 @@ self.onmessage = (ev) => {
   } else if (msg.type === 'rawScan') {             // gespeicherter Scan (Rohdaten)
     const r = unpack(msg.buf, false);
     const STEP = 20000;                            // Frames je Block
+    if (msg.halves) {                              // ganzer Scan: vordere (src 0) / hintere (src 1) Fächerhälfte
+      for (let f = 0; f < r.n; f += STEP) {
+        const m = Math.min(STEP, r.n - f);
+        emit(transformBlock(r.z, r.a, r.d, r.it, f, m, 1, msg.halves.stride), { scanId: msg.scanId, src: 0 });
+        emit(transformBlock(r.z, r.a, r.d, r.it, f, m, -1, msg.halves.stride), { scanId: msg.scanId, src: 1 });
+      }
+      self.postMessage({ type: 'rawDone', scanId: msg.scanId, src: msg.src || 0, total: totalPoints, edgeRemoved });
+      return;
+    }
     if (msg.seam) {                                // Naht-Ansicht: nur Anfang (src 0) und Ende (src 1)
       const { ov, sa } = msg.seam;
       let i1 = 0; while (i1 < r.n && r.z[i1] <= ov) i1++;

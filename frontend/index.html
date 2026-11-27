@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PiLiDAR 2.0</title>
-  <link rel="stylesheet" href="css/style.css?v=20261127y" />
+  <link rel="stylesheet" href="css/style.css?v=20261127z" />
 </head>
 <body>
   <header>
@@ -80,6 +80,7 @@
           <label title="Die vordere und hintere Hälfte des LiDAR-Fächers sind um einen festen Winkel gegeneinander verdreht (Geräteeigenschaft, im Original-PiLiDAR ca. 2,4°). 0 = keine Korrektur">Hälften-Verdrehung
             <input id="offH" type="number" step="0.25" min="-10" max="10" style="width:70px" /> °</label>
           <div class="btnrow">
+            <button id="btnHalves" class="secondary" title="Ganzen Scan zeigen, vordere und hintere LiDAR-Hälfte verschieden gefärbt – am besten mit einem 360°-Scan">Hälften zeigen</button>
             <button id="btnSeam" class="secondary" title="Nur Anfang und Ende des Scans zeigen – dort müssen Kanten deckungsgleich sein">Naht zeigen</button>
             <button id="btnOffCheck" class="secondary" title="Überlappung mit diesen Werten berechnen (ohne Speichern)">Mit Scan prüfen</button>
             <button id="btnOffApply" class="secondary">Übernehmen</button>
@@ -234,11 +235,11 @@
     </section>
   </main>
 
-  <script src="js/viewer2d.js?v=20261127y"></script>
-  <script src="js/viewer3d.js?v=20261127y"></script>
-  <script src="js/export.js?v=20261127y"></script>
-  <script src="js/floorplan.js?v=20261127y"></script>
-  <script src="js/registration.js?v=20261127y"></script>
-  <script src="js/app.js?v=20261127y"></script>
+  <script src="js/viewer2d.js?v=20261127z"></script>
+  <script src="js/viewer3d.js?v=20261127z"></script>
+  <script src="js/export.js?v=20261127z"></script>
+  <script src="js/floorplan.js?v=20261127z"></script>
+  <script src="js/registration.js?v=20261127z"></script>
+  <script src="js/app.js?v=20261127z"></script>
 </body>
 </html>

@@ -11,6 +11,8 @@ import time
 from collections import deque
 from datetime import datetime
 
+import numpy as np
+
 from .calibration import calibrate_offset, calibrate_rotation
 from .pointcloud import frames_to_arrays
 from .recorder import FrameRecorder
@@ -429,7 +431,8 @@ class ScanController:
                 worst = "warn"
         return {"status": worst, "checks": checks}
 
-    def check_offsets(self, scan_id: str, angle_offset: float, y_mm: float, z_mm: float = 0.0) -> dict:
+    def check_offsets(self, scan_id: str, angle_offset: float, y_mm: float, z_mm: float = 0.0,
+                      z_scale: float | None = None, half_yaw: float | None = None) -> dict:
         """Überlappung (Abstand Anfang/Ende des Scans, mm) für frei gewählte Offsets –
         zum Prüfen von Hand eingegebener Werte, ohne Motor/LiDAR, ohne zu speichern."""
         from .qa import loop_closure_residual
@@ -448,7 +451,29 @@ class ScanController:
             v = loop_closure_residual(arr, a, (0.0, 0.0, z), lc["DISTANCE_MIN_MM"], lc["DISTANCE_MAX_MM"],
                                       scan_angle, overlap, max_pts=20000)
             return None if v is None else round(float(v), 1)
+        # Ganzer Scan: vordere gegen hintere Fächerhälfte (nur sinnvoll ab ~360°, dann decken
+        # beide Hälften den ganzen Raum ab). Mittlerer Abstand nächster Nachbarn, bei 150 mm gekappt.
+        cur_k, cur_h = float(geom.get("Z_SCALE", 1.0)), float(geom.get("HALF_YAW", 0.0))
+        z_scale = cur_k if z_scale is None else float(z_scale)
+        half_yaw = cur_h if half_yaw is None else float(half_yaw)
+        sub = {k: np.asarray(v)[::4] for k, v in arr.items() if k in ("z_angle", "angles", "distances", "intensities")}
+
+        def halves(a, y, z, k, h):
+            if scan_angle < 350.0:
+                return None
+            from scipy.spatial import cKDTree
+            from .pointcloud import build_pointcloud as bp
+            f, _ = bp(sub, a, (0.0, y, z), 300, 8000, z_scale=k, half_yaw=h, half_select=1)
+            b, _ = bp(sub, a, (0.0, y, z), 300, 8000, z_scale=k, half_yaw=h, half_select=-1)
+            if len(f) < 1000 or len(b) < 1000:
+                return None
+            rng = np.random.default_rng(0)
+            f = f[rng.choice(len(f), min(20000, len(f)), replace=False)]
+            d, _ = cKDTree(b).query(f, k=1)
+            return round(float(np.minimum(d, 150.0).mean()), 1)
         return {"ok": True, "scan_id": scan_id,
+                "halves_test_mm": halves(angle_offset, y_mm, z_mm, z_scale, half_yaw),
+                "halves_current_mm": halves(lc["ANGLE_OFFSET"], geom["MODEL_Y_OFFSET"], geom["MODEL_Z_OFFSET"], cur_k, cur_h),
                 "test": {"angle_offset": angle_offset, "model_y_offset": y_mm, "model_z_offset": z_mm,
                          "loop_closure_mm": res(angle_offset, y_mm, z_mm)},
                 "current": {"angle_offset": lc["ANGLE_OFFSET"], "model_y_offset": geom["MODEL_Y_OFFSET"],

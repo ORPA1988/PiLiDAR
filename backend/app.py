@@ -168,7 +168,9 @@ async def api_cal_check(payload: dict = Body(...)):
     return await asyncio.to_thread(controller.check_offsets, str(payload.get("scan_id", "")),
                                    float(payload.get("angle_offset", 0.0)),
                                    float(payload.get("model_y_offset", 0.0)),
-                                   float(payload.get("model_z_offset", 0.0)))
+                                   float(payload.get("model_z_offset", 0.0)),
+                                   None if payload.get("z_scale") is None else float(payload["z_scale"]),
+                                   None if payload.get("half_yaw") is None else float(payload["half_yaw"]))
 
 
 @app.post("/api/stepper/confirm_home")
