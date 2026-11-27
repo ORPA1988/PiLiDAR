@@ -90,6 +90,8 @@ Fläche, Höhe; DXF (Schichten WAENDE, SCANPUNKTE, MASSE; Meter) und SVG 1:10. D
 Standort sichtbaren Raums (gemessene Abschnitte durchgezogen, ergänzte gestrichelt; Fläche, Umfang; DXF-Schicht UMRISS) –
 nur bei einem Standort und wenn ringsum genug Wände erkannt wurden.
 
+**Bericht** (Knopf beim Export): eine HTML-Datei mit Scan-Daten, Raummaßen, Umriss, Flächen, 3D-Ansicht,
+Grundriss und zwei Schnitten.
 **Schnittansicht** (`frontend/js/section.js`): senkrechter Schnitt durch einen Punkt in wählbarer Richtung
 und Dicke (auch aus zwei Messpunkten oder an den Wänden ausgerichtet), Export DXF (Schicht SCHNITT), SVG 1:10, PNG.
 **Flächen** (Farbmodus, `frontend/js/surfaces.js`): Boden, Decke, Wände, Schrägen und waagerechte Flächen je

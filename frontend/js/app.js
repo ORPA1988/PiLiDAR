@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261128g';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261128h';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -238,6 +238,8 @@ $('btnReport').onclick = async () => {
   try {                                               // Flächen
     const r = Surfaces.classify(v3d);
     rows.push(['Gesehene Flächen', Surfaces.describe(r).join(' · ') || '–']);
+    if (r.height) for (let i = rows.length - 1; i >= 0; i--)      // genauere Höhe vorhanden -> Schätzung aus dem Grundriss weglassen
+      if (rows[i][0] === 'Grundriss' && rows[i][1].startsWith('Raumhöhe')) rows.splice(i, 1);
   } catch (e) { /* keine Flächen */ }
   img.unshift(['3D-Ansicht (wie gerade eingestellt)', $('view3d').toDataURL('image/png')]);
   const html = `<!doctype html><html lang="de"><meta charset="utf-8"><title>PiLiDAR Bericht ${esc(id)}</title>

@@ -327,7 +327,7 @@ const FloorPlan = (() => {
   function describe(res) {
     const m = res.m || {}, t = [];
     if (m.lengthA) t.push(`Raum ca. ${Math.max(m.lengthA, m.lengthB).toFixed(2)} × ${Math.min(m.lengthA, m.lengthB).toFixed(2)} m`);
-    if (m.area) t.push(`Fläche ${m.areaOpen ? '≥ ' : 'ca. '}${m.area.toFixed(1)} m²${m.areaOpen ? ' (Raum nicht geschlossen)' : ''}`);
+    if (m.area && !(m.areaOpen && res.outline)) t.push(`Fläche ${m.areaOpen ? '≥ ' : 'ca. '}${m.area.toFixed(1)} m²${m.areaOpen ? ' (Raum nicht geschlossen)' : ''}`);
     if (res.outline) t.push(`Umriss (vom Standort sichtbar): ${res.outline.area.toFixed(1)} m², Umfang ${res.outline.perimeter.toFixed(1)} m, ` +
       `davon ${res.outline.added.toFixed(1)} m ergänzt`);
     t.push(m.height ? `Raumhöhe (tiefste Fläche bis Decke) ca. ${m.height.toFixed(2)} m` : 'Raumhöhe: Boden nicht sichtbar');
