@@ -86,7 +86,9 @@ Fortschritt mit Restzeit, Selbsttest (`GET /api/selftest`).
 
 **Export (Browser).** PLY und LAS 1.2 der sichtbaren Punkte (optional ausgedünnt), PNG der Ansicht,
 **Grundriss** (`frontend/js/floorplan.js`): nur senkrechte Flächen, Wände per RANSAC, Raummaße,
-Fläche, Höhe; DXF (Schichten WAENDE, SCANPUNKTE, MASSE; Meter) und SVG 1:10.
+Fläche, Höhe; DXF (Schichten WAENDE, SCANPUNKTE, MASSE; Meter) und SVG 1:10. Dazu ein geschlossener **Umriss** des vom
+Standort sichtbaren Raums (gemessene Abschnitte durchgezogen, ergänzte gestrichelt; Fläche, Umfang; DXF-Schicht UMRISS) –
+nur bei einem Standort und wenn ringsum genug Wände erkannt wurden.
 
 **Schnittansicht** (`frontend/js/section.js`): senkrechter Schnitt durch einen Punkt in wählbarer Richtung
 und Dicke (auch aus zwei Messpunkten oder an den Wänden ausgerichtet), Export DXF (Schicht SCHNITT), SVG 1:10, PNG.
