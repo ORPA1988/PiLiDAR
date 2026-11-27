@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127q';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127r';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -168,6 +168,7 @@ function clearView() {
   v2d.clear(); v3d.clear(); worker.postMessage({ type: 'clear' });
   totalPoints = 0; $('stPts').textContent = '0';
   loadedScans = []; poses = []; alignQ = []; $('alignInfo').textContent = '';
+  if ($('manualBox')) $('manualBox').classList.add('hidden');
 }
 $('btnClear').onclick = clearView;
 // PLY: sichtbare Punkte (Höhenschnitt beachtet) direkt aus dem Viewer
@@ -382,6 +383,7 @@ async function loadScanInto3D(scanId, add = false, quiet = false) {
   if (!add || !loadedScans.length) clearView();
   const src = loadedScans.length;
   loadedScans.push(scanId); poses[src] = { yaw: 0, tx: 0, ty: 0, tz: 0 }; alignQ[src] = null;
+  if (add) setTimeout(updateManualBox, 0);
   if (add && !quiet) toast(`Scan ${scanId} überlagert (Nr. ${src}). Mit „Scans ausrichten“ passend zueinander legen.`, 'info');
   // auf 3D-Ansicht umschalten
   const radio3d = document.querySelector('input[name="view"][value="3d"]');
@@ -471,7 +473,8 @@ function composePose(d, p) {
 function describePose(k) {
   const p = poses[k], q = alignQ[k], deg = ((p.yaw * 180 / Math.PI) % 360 + 540) % 360 - 180;
   let t = `Nr. ${k}: ${deg.toFixed(1)}°, (${p.tx.toFixed(2)} | ${p.ty.toFixed(2)} | ${p.tz.toFixed(2)}) m`;
-  if (q) {
+  if (q && q.manual) t += ' (von Hand)';
+  else if (q) {
     t += `, Überdeckung ${Math.round(q.overlap * 100)} %` + (q.rmse ? `, Abweichung ${(q.rmse * 100).toFixed(1)} cm` : '');
     if (q.overlap < 0.3) t += ' – unsicher';
     else if (q.second && q.overlap - q.second < 0.05) t += ' – mehrdeutig, bitte prüfen';
@@ -481,7 +484,69 @@ function describePose(k) {
 function showAlignInfo() {
   $('alignInfo').innerHTML = loadedScans.length > 1
     ? loadedScans.map((id, k) => k ? describePose(k) : `Nr. 0: ${id} (Bezug)`).join('<br>') : '';
+  updateManualBox();
 }
+
+// --- Lage von Hand ------------------------------------------------------------
+function updateManualBox() {
+  const n = loadedScans.length;
+  $('manualBox').classList.toggle('hidden', n < 2);
+  if (n < 2) return;
+  const sel = $('mvScan'), cur = +sel.value || 1;
+  sel.innerHTML = '';
+  for (let k = 1; k < n; k++) {
+    const o = document.createElement('option'); o.value = k; o.textContent = `Scan Nr. ${k}`; sel.appendChild(o);
+  }
+  sel.value = Math.min(cur, n - 1);
+  fillManualInputs();
+}
+function fillManualInputs() {
+  const p = poses[+$('mvScan').value]; if (!p) return;
+  $('mvYaw').value = (((p.yaw * 180 / Math.PI) % 360 + 540) % 360 - 180).toFixed(1);
+  $('mvX').value = p.tx.toFixed(3); $('mvY').value = p.ty.toFixed(3); $('mvZ').value = p.tz.toFixed(3);
+}
+// Lage eines Scans auf einen Zielwert setzen (Punkte: erst zurück auf 0, dann Ziel)
+function setPose(k, target) {
+  const p = poses[k], c = Math.cos(-p.yaw), s = Math.sin(-p.yaw);
+  v3d.transformSource(k, -p.yaw, -(c * p.tx - s * p.ty), -(s * p.tx + c * p.ty), -p.tz);
+  v3d.transformSource(k, target.yaw, target.tx, target.ty, target.tz);
+  poses[k] = { ...target };
+  alignQ[k] = { manual: true };
+  $('alignInfo').innerHTML = loadedScans.map((id, j) => j ? describePose(j) : `Nr. 0: ${id} (Bezug)`).join('<br>');
+  fillManualInputs();
+}
+$('mvScan').onchange = fillManualInputs;
+document.querySelectorAll('.mv').forEach(b => b.onclick = () => {
+  const k = +$('mvScan').value, p = poses[k]; if (!p) return;
+  const [axis, sign] = b.dataset.mv.split(','), [dm, ddeg] = $('mvStep').value.split(',').map(Number);
+  const t = { ...p };
+  if (axis === 'x') t.tx += sign * dm;
+  else if (axis === 'y') t.ty += sign * dm;
+  else if (axis === 'z') t.tz += sign * dm;
+  else t.yaw += sign * ddeg * Math.PI / 180;      // Drehung um den eigenen Standort (tx, ty bleibt)
+  setPose(k, t);
+});
+for (const id of ['mvYaw', 'mvX', 'mvY', 'mvZ']) $(id).onchange = () => {
+  const k = +$('mvScan').value; if (!poses[k]) return;
+  const v = id => +$(id).value || 0;
+  setPose(k, { yaw: v('mvYaw') * Math.PI / 180, tx: v('mvX'), ty: v('mvY'), tz: v('mvZ') });
+};
+$('btnMvReset').onclick = () => { const k = +$('mvScan').value; if (poses[k]) setPose(k, { yaw: 0, tx: 0, ty: 0, tz: 0 }); };
+$('btnMvIcp').onclick = async () => {
+  const k = +$('mvScan').value; if (!poses[k]) return;
+  const btn = $('btnMvIcp'); btn.disabled = true;
+  try {
+    const ref = Registration.voxelSample(v3d.chunks, s => s !== k, 0.05, 250000);
+    const mov = Registration.voxelSample(v3d.chunks, s => s === k, 0.05);
+    const r = await regRun(ref, mov, { init: { yaw: 0, tx: 0, ty: 0, tz: 0 } }, `Scan ${k}`);
+    v3d.transformSource(k, r.yaw, r.tx, r.ty, r.tz);
+    poses[k] = composePose(r, poses[k]);
+    alignQ[k] = { overlap: r.overlap, rmse: r.rmse };
+    showAlignInfo();
+    toast(r.overlap < 0.3 ? 'Feinausrichtung: kaum Überdeckung – näher hinschieben.' : 'Feinausrichtung fertig.', r.overlap < 0.3 ? 'error' : 'info');
+  } catch (e) { toast('Feinausrichtung fehlgeschlagen: ' + e.message); }
+  finally { btn.disabled = false; }
+};
 $('btnAlign').onclick = async () => {
   if (loadedScans.length < 2) { toast('Erst mindestens zwei Scans laden (weitere mit „+“ in der Scanliste).'); return; }
   const btn = $('btnAlign'); btn.disabled = true;
@@ -522,7 +587,7 @@ $('btnProjSave').onclick = async () => {
   if (!name) { toast('Bitte einen Projektnamen eingeben.'); return; }
   const body = { scans: loadedScans.map((id, k) => ({ id,
     pose: { yaw_deg: poses[k].yaw * 180 / Math.PI, tx: poses[k].tx, ty: poses[k].ty, tz: poses[k].tz },
-    ...(alignQ[k] ? { rmse: alignQ[k].rmse, overlap: alignQ[k].overlap } : {}) })) };
+    ...(alignQ[k] && !alignQ[k].manual ? { rmse: alignQ[k].rmse, overlap: alignQ[k].overlap } : {}) })) };
   const r = await api(`/api/projects/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(body) });
   if (r.ok) { toast(`Projekt „${name}“ gespeichert.`, 'info'); await refreshProjects(); $('projSel').value = name; }
 };

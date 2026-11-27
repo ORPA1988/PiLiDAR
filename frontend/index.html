@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PiLiDAR 2.0</title>
-  <link rel="stylesheet" href="css/style.css?v=20261127q" />
+  <link rel="stylesheet" href="css/style.css?v=20261127r" />
 </head>
 <body>
   <header>
@@ -119,6 +119,38 @@
         <div class="hint">Weitere Scans in der Liste mit „+“ dazuladen, dann ausrichten. Scanner waagerecht, die Scans müssen sich überschneiden.</div>
         <button id="btnAlign" class="secondary" title="Dazugeladene Scans automatisch an den ersten anpassen (Drehung + Verschiebung)">&#129513; Scans ausrichten</button>
         <div id="alignInfo" class="hint"></div>
+        <div id="manualBox" class="manual hidden">
+          <div class="btnrow">Von Hand:
+            <select id="mvScan" title="Welcher Scan verschoben wird (Nr. 0 ist der Bezug)"></select>
+            <select id="mvStep" title="Schrittweite der Knöpfe">
+              <option value="0.01,0.5">fein 1 cm / 0,5°</option>
+              <option value="0.05,2" selected>mittel 5 cm / 2°</option>
+              <option value="0.2,10">grob 20 cm / 10°</option></select>
+          </div>
+          <div class="btnrow mvpad">
+            <button class="secondary mv" data-mv="rot,1" title="gegen den Uhrzeigersinn um den eigenen Standort">&#8634;</button>
+            <button class="secondary mv" data-mv="y,1" title="y +">&#8593;</button>
+            <button class="secondary mv" data-mv="rot,-1" title="im Uhrzeigersinn um den eigenen Standort">&#8635;</button>
+            <button class="secondary mv" data-mv="z,1" title="höher">z+</button>
+            <button class="secondary mv" data-mv="x,-1" title="x −">&#8592;</button>
+            <button class="secondary mv" data-mv="y,-1" title="y −">&#8595;</button>
+            <button class="secondary mv" data-mv="x,1" title="x +">&#8594;</button>
+            <button class="secondary mv" data-mv="z,-1" title="tiefer">z−</button>
+          </div>
+          <div class="btnrow">
+            <label>Drehung <input id="mvYaw" type="number" step="0.1" style="width:62px" /> °</label>
+          </div>
+          <div class="btnrow">
+            <label>x <input id="mvX" type="number" step="0.01" style="width:58px" /></label>
+            <label>y <input id="mvY" type="number" step="0.01" style="width:58px" /></label>
+            <label>z <input id="mvZ" type="number" step="0.01" style="width:58px" /> m</label>
+          </div>
+          <div class="btnrow">
+            <button id="btnMvIcp" class="secondary" title="Von der jetzigen Lage aus fein einpassen (ohne Grobsuche)">Feinausrichten ab hier</button>
+            <button id="btnMvReset" class="secondary" title="Lage dieses Scans auf 0 zurücksetzen">Zurücksetzen</button>
+          </div>
+          <div class="hint">Tipp: Ansicht „Oben“ + Farbe „Scan-Nummer“; grob von Hand hinlegen, dann „Feinausrichten ab hier“.</div>
+        </div>
         <div class="btnrow">
           <input id="projName" type="text" placeholder="Projektname" style="width:120px" />
           <button id="btnProjSave" class="secondary" title="Geladene Scans mit ihrer Lage auf dem Pi speichern">Speichern</button>
@@ -178,11 +210,11 @@
     </section>
   </main>
 
-  <script src="js/viewer2d.js?v=20261127q"></script>
-  <script src="js/viewer3d.js?v=20261127q"></script>
-  <script src="js/export.js?v=20261127q"></script>
-  <script src="js/floorplan.js?v=20261127q"></script>
-  <script src="js/registration.js?v=20261127q"></script>
-  <script src="js/app.js?v=20261127q"></script>
+  <script src="js/viewer2d.js?v=20261127r"></script>
+  <script src="js/viewer3d.js?v=20261127r"></script>
+  <script src="js/export.js?v=20261127r"></script>
+  <script src="js/floorplan.js?v=20261127r"></script>
+  <script src="js/registration.js?v=20261127r"></script>
+  <script src="js/app.js?v=20261127r"></script>
 </body>
 </html>
