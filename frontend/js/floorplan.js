@@ -256,6 +256,7 @@ const FloorPlan = (() => {
       });
       hits.push(best);
     }
+    if (hits.filter(Boolean).length < 240) return null;        // zu wenig Wände ringsum -> kein verlässlicher Umriss
     const runs = [];
     for (const h of hits) {
       if (!h) continue;
@@ -285,6 +286,12 @@ const FloorPlan = (() => {
       const p = pts[i], q = pts[(i + 1) % pts.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]);
       area += p[0] * q[1] - q[0] * p[1]; per += L; if (!p[2]) added += L;
     }
+    let inside = false;                                        // Standort muss im Umriss liegen
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const p = pts[i], q = pts[j];
+      if ((p[1] > st[1]) !== (q[1] > st[1]) && st[0] < (q[0] - p[0]) * (st[1] - p[1]) / (q[1] - p[1]) + p[0]) inside = !inside;
+    }
+    if (!inside || added > 0.5 * per) return null;
     return { pts, area: Math.abs(area) / 2, perimeter: per, added };
   }
 
