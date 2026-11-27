@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127t';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127u';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -171,15 +171,24 @@ function clearView() {
   if ($('manualBox')) $('manualBox').classList.add('hidden');
 }
 $('btnClear').onclick = clearView;
+// Punkte für den Export: sichtbar (Höhenschnitt), optional ohne Ausreißer, optional ausgedünnt
+function exportPoints() {
+  let v = v3d.visiblePoints();
+  if ($('outlierChk').checked && v.total) {
+    v = removeOutliers(v);
+    toast(`${v.removed.toLocaleString('de-DE')} Ausreißer entfernt.`, 'info');
+  }
+  return thinPoints(v, +$('thinCell').value);
+}
 // PLY: sichtbare Punkte (Höhenschnitt beachtet) direkt aus dem Viewer
 $('btnPly').onclick = () => {
-  const v = thinPoints(v3d.visiblePoints(), +$('thinCell').value);
+  const v = exportPoints();
   if (!v.total) { toast('Keine Punkte in der 3D-Ansicht.'); return; }
   exportPLY(v.xyz, v.inten, v.total);
 };
 
 $('btnLas').onclick = () => {
-  const v = thinPoints(v3d.visiblePoints(), +$('thinCell').value);
+  const v = exportPoints();
   if (!v.total) { toast('Keine Punkte in der 3D-Ansicht.'); return; }
   exportLAS(v.xyz, v.inten, v.total, `${currentScanId || 'pilidar'}.las`);
 };

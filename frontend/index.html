@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PiLiDAR 2.0</title>
-  <link rel="stylesheet" href="css/style.css?v=20261127t" />
+  <link rel="stylesheet" href="css/style.css?v=20261127u" />
 </head>
 <body>
   <header>
@@ -182,6 +182,8 @@
         <label title="Je Würfel nur ein Punkt – kleinere Dateien, gleichmäßige Dichte">Ausdünnen
           <select id="thinCell"><option value="0">aus</option><option value="0.005">5 mm</option>
             <option value="0.01">1 cm</option><option value="0.02">2 cm</option><option value="0.05">5 cm</option></select></label>
+        <label title="Vereinzelte Streupunkte (Staub, Spiegelungen, Kanten) vor dem Export entfernen">
+          <input id="outlierChk" type="checkbox" /> Ausreißer entfernen</label>
         <button id="btnPly" class="secondary" title="Sichtbare Punkte (mit Höhenschnitt) als binäres PLY">PLY (sichtbar)</button>
         <button id="btnLas" class="secondary" title="Sichtbare Punkte als LAS 1.2 (CloudCompare, QGIS)">LAS (sichtbar)</button>
         <button id="btnPng" class="secondary" title="Aktuelle 3D-Ansicht als Bild">Bild (PNG)</button>
@@ -225,11 +227,11 @@
     </section>
   </main>
 
-  <script src="js/viewer2d.js?v=20261127t"></script>
-  <script src="js/viewer3d.js?v=20261127t"></script>
-  <script src="js/export.js?v=20261127t"></script>
-  <script src="js/floorplan.js?v=20261127t"></script>
-  <script src="js/registration.js?v=20261127t"></script>
-  <script src="js/app.js?v=20261127t"></script>
+  <script src="js/viewer2d.js?v=20261127u"></script>
+  <script src="js/viewer3d.js?v=20261127u"></script>
+  <script src="js/export.js?v=20261127u"></script>
+  <script src="js/floorplan.js?v=20261127u"></script>
+  <script src="js/registration.js?v=20261127u"></script>
+  <script src="js/app.js?v=20261127u"></script>
 </body>
 </html>

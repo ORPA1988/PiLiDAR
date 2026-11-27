@@ -81,6 +81,38 @@ function thinPoints(v, cell) {
   return { xyz, inten, total: n };
 }
 
+/* Ausreißer entfernen: Punkt bleibt, wenn in seinem Würfel und den 26 Nachbarn
+ * (Kante = cell) mindestens minN Punkte liegen. Entfernt Streupunkte (Staub, Spiegelungen,
+ * Kantentreffer „in der Luft“), lässt dünn abgetastete ferne Wände stehen. */
+function removeOutliers(v, cell = 0.05, minN = 4) {
+  const B = 131072, cnt = new Map(), keys = new Float64Array(v.total);
+  const K1 = 17179869184, K2 = 131072;
+  for (let i = 0; i < v.total; i++) {
+    const k = (Math.floor(v.xyz[i * 3] / cell) + B) * K1 + (Math.floor(v.xyz[i * 3 + 1] / cell) + B) * K2 + (Math.floor(v.xyz[i * 3 + 2] / cell) + B);
+    keys[i] = k; cnt.set(k, (cnt.get(k) || 0) + 1);
+  }
+  const ok = new Map();                                   // Ergebnis je Würfel zwischenspeichern
+  const keep = new Uint8Array(v.total); let n = 0;
+  for (let i = 0; i < v.total; i++) {
+    const k = keys[i];
+    let r = ok.get(k);
+    if (r === undefined) {
+      let s = 0;
+      for (let dx = -1; dx <= 1 && s < minN; dx++) for (let dy = -1; dy <= 1 && s < minN; dy++) for (let dz = -1; dz <= 1; dz++) {
+        s += cnt.get(k + dx * K1 + dy * K2 + dz) || 0; if (s >= minN) break;
+      }
+      r = s >= minN; ok.set(k, r);
+    }
+    if (r) { keep[i] = 1; n++; }
+  }
+  const xyz = new Float32Array(n * 3), inten = new Float32Array(n);
+  for (let i = 0, k = 0; i < v.total; i++) if (keep[i]) {
+    xyz[k * 3] = v.xyz[i * 3]; xyz[k * 3 + 1] = v.xyz[i * 3 + 1]; xyz[k * 3 + 2] = v.xyz[i * 3 + 2]; inten[k] = v.inten[i]; k++;
+  }
+  return { xyz, inten, total: n, removed: v.total - n };
+}
+
+window.removeOutliers = removeOutliers;
 window.exportPLY = exportPLY;
 window.thinPoints = thinPoints;
 window.exportLAS = exportLAS;
