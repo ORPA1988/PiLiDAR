@@ -81,7 +81,8 @@ async def _no_stale_frontend(request: Request, call_next):
 @app.get("/api/status")
 async def api_status():
     st = controller.status()
-    st["scan_angle"] = config.MODE_B_CONTINUOUS["SCAN_ANGLE"]   # für Fortschrittsanzeige
+    sp = getattr(controller, "_scan_params", None)              # Winkel des laufenden Scans
+    st["scan_angle"] = sp[0] if (sp and st.get("state") == "scanning") else config.MODE_B_CONTINUOUS["SCAN_ANGLE"]
     st["speed_dps"] = config.MODE_B_CONTINUOUS["SPEED_DPS"]
     return st
 
@@ -114,7 +115,10 @@ async def api_scan_start(payload: dict | None = None):
     payload = payload or {}
     mode = str(payload.get("mode", "B")).upper()
     name = str(payload.get("name", ""))
-    scan_id = controller.start_scan(mode=mode, name=name)
+    sa, ov = payload.get("scan_angle"), payload.get("overlap_deg")
+    scan_id = controller.start_scan(mode=mode, name=name,
+                                    scan_angle=None if sa is None else float(sa),
+                                    overlap_deg=None if ov is None else float(ov))
     return {"ok": True, "scan_id": scan_id}
 
 

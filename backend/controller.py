@@ -187,10 +187,20 @@ class ScanController:
             raise RuntimeError(f"Beschäftigt: {self.state}")
         self.stepper.confirm_home()
 
-    def start_scan(self, mode: str = "B", name: str = "") -> str:
+    MAX_SCAN_ANGLE = 270.0   # LiDAR-Kabel: nicht weiter drehen
+
+    def start_scan(self, mode: str = "B", name: str = "", scan_angle: float | None = None,
+                   overlap_deg: float | None = None) -> str:
+        """scan_angle/overlap_deg: nur für diesen Scan (Modus B), z. B. 210/30 für Prüfscans."""
         if self.state not in (STATE_IDLE, STATE_LIDAR_ONLY):
             raise RuntimeError(f"Beschäftigt: {self.state}")
         self._check_position()
+        sa = float(scan_angle) if scan_angle is not None else float(self.cfg.MODE_B_CONTINUOUS["SCAN_ANGLE"])
+        if not 10.0 <= sa <= self.MAX_SCAN_ANGLE:
+            raise RuntimeError(f"Scanwinkel {sa}° außerhalb 10…{self.MAX_SCAN_ANGLE:.0f}°")
+        ov = float(overlap_deg) if overlap_deg is not None else (
+            max(0.0, sa - 180.0) if scan_angle is not None else float(self.cfg.MODE_B_CONTINUOUS["OVERLAP_DEG"]))
+        self._scan_params = (sa, min(ov, max(0.0, sa - 180.0)))
         # Den LiDAR-Spiegel beim Übergang aus 2D-Live NICHT aus- und wieder
         # einschalten – er soll durchgehend laufen. lidar.start() in _run_scan
         # ist idempotent (No-op, falls bereits aktiv).
@@ -218,9 +228,9 @@ class ScanController:
                 scan_angle = self.cfg.MODE_A_STEPWISE["SCAN_ANGLE"]
                 overlap = 0.0
             else:
-                scan_angle = self.cfg.MODE_B_CONTINUOUS["SCAN_ANGLE"]
-                overlap = self.cfg.MODE_B_CONTINUOUS["OVERLAP_DEG"]
-                self._run_mode_b()
+                scan_angle, overlap = getattr(self, "_scan_params", None) or (
+                    self.cfg.MODE_B_CONTINUOUS["SCAN_ANGLE"], self.cfg.MODE_B_CONTINUOUS["OVERLAP_DEG"])
+                self._run_mode_b(scan_angle)
         finally:
             self._recording = False
             time.sleep(0.1)
@@ -261,9 +271,9 @@ class ScanController:
                     break
                 time.sleep(0.005)
 
-    def _run_mode_b(self) -> None:
+    def _run_mode_b(self, scan_angle: float | None = None) -> None:
         cfg = self.cfg.MODE_B_CONTINUOUS
-        scan_angle = cfg["SCAN_ANGLE"]
+        scan_angle = float(scan_angle if scan_angle is not None else cfg["SCAN_ANGLE"])
         self.stepper.start_continuous(cfg["SPEED_DPS"], cfg["ACCEL_DPS2"], direction=1)
         while self.stepper.get_current_angle() < scan_angle and self.state == STATE_SCANNING:
             time.sleep(0.02)
