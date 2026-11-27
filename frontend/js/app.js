@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127z';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261128a';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -201,8 +201,55 @@ $('btnPng').onclick = () => {
   a.download = `${currentScanId || 'pilidar'}_ansicht.png`; a.click();
 };
 
+// --- Schnittansicht --------------------------------------------------------
+let secRes = null;
+function secCompute() {
+  try {
+    const t0 = performance.now();
+    secRes = Section.compute(v3d, { x0: +$('secX').value || 0, y0: +$('secY').value || 0,
+                                    dirDeg: +$('secDir').value || 0, thick: +$('secThick').value });
+    Section.draw($('secCanvas'), secRes);
+    $('secInfo').textContent = `${secRes.n.toLocaleString('de-DE')} Punkte · Länge ${(secRes.sMax - secRes.sMin).toFixed(2)} m · ` +
+      `Höhe ${secRes.zMin.toFixed(2)} … ${secRes.zMax.toFixed(2)} m (${(secRes.zMax - secRes.zMin).toFixed(2)} m) · ` +
+      `${Math.round(performance.now() - t0)} ms. Raster 0,5 m, rot gestrichelt = Bezugspunkt.`;
+  } catch (e) { toast('Schnitt: ' + e.message); }
+}
+$('btnSection').onclick = () => {
+  if (!v3d.total) { toast('Erst einen Scan in 3D laden.'); return; }
+  $('secDlg').classList.remove('hidden'); secCompute();
+};
+$('secClose').onclick = () => $('secDlg').classList.add('hidden');
+$('secRedo').onclick = secCompute;
+for (const id of ['secX', 'secY', 'secDir', 'secThick']) $(id).onchange = secCompute;
+$('secTurn').onclick = () => { $('secDir').value = (((+$('secDir').value || 0) + 90) % 360).toFixed(1); secCompute(); };
+$('secFromPicks').onclick = () => {
+  if (!v3d.picks || v3d.picks.length < 2) { toast('Erst mit „Messen“ zwei Punkte in der 3D-Ansicht anklicken.'); return; }
+  const [a, b] = v3d.picks;
+  $('secX').value = a[0].toFixed(2); $('secY').value = a[1].toFixed(2);
+  $('secDir').value = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI).toFixed(1); secCompute();
+};
+$('secWalls').onclick = () => {
+  try {
+    const f = FloorPlan.compute(v3d, { orthogonal: true });
+    if (typeof f.m.baseDeg !== 'number') throw new Error('keine Wände erkannt');
+    $('secDir').value = f.m.baseDeg.toFixed(1); secCompute();
+  } catch (e) { toast('Ausrichten: ' + e.message); }
+};
+const secName = ext => `schnitt_${(currentScanId || 'live')}.${ext}`;
+$('secDxf').onclick = () => secRes && FloorPlan.download(secName('dxf'), Section.toDXF(secRes), 'application/dxf');
+$('secSvg').onclick = () => secRes && FloorPlan.download(secName('svg'), Section.toSVG(secRes), 'image/svg+xml');
+$('secPng').onclick = () => { const a = document.createElement('a'); a.href = $('secCanvas').toDataURL('image/png'); a.download = secName('png'); a.click(); };
+
 // --- 3D-Darstellung ----------------------------------------------------
-$('colorMode').onchange = () => v3d.setColorMode(+$('colorMode').value);
+$('colorMode').onchange = () => {
+  const m = +$('colorMode').value;
+  if (m !== 6) { v3d.setColorMode(m); return; }
+  try {                                               // Abweichung zwischen Scan 0 und den dazugeladenen
+    const t0 = performance.now(), r = v3d.computeDiff(0.10);
+    toast(`Abweichung berechnet (${Math.round(performance.now() - t0)} ms): ${(r.share * 100).toFixed(1)} % der Punkte ` +
+          'liegen 5 cm oder mehr vom anderen Scan entfernt (rot = ab 10 cm). Vorher „Scans ausrichten“.', 'info');
+  } catch (e) { toast(e.message); $('colorMode').value = '5'; v3d.setColorMode(5); }
+};
 // Kantenfilter: Einstellung merken, geladene Scans mit gleicher Lage neu rechnen
 try { $('edgeChk').checked = localStorage.getItem('pilidar.edge') === '1'; } catch (e) {}
 $('edgeChk').onchange = async () => {

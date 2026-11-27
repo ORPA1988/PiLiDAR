@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PiLiDAR 2.0</title>
-  <link rel="stylesheet" href="css/style.css?v=20261127z" />
+  <link rel="stylesheet" href="css/style.css?v=20261128a" />
 </head>
 <body>
   <header>
@@ -21,6 +21,32 @@
     <button id="btnConfirmHome" class="primary">Ausgangslage bestätigen</button>
   </div>
   <div id="toast"></div>
+
+  <div id="secDlg" class="dialog hidden">
+    <div class="dialog-box">
+      <div class="dialog-head"><strong>Schnittansicht</strong><button id="secClose" class="secondary">&#10005;</button></div>
+      <canvas id="secCanvas" width="760" height="420"></canvas>
+      <div id="secInfo" class="hint"></div>
+      <div class="btnrow">
+        <label>durch x <input id="secX" type="number" step="0.1" value="0" style="width:64px" /></label>
+        <label>y <input id="secY" type="number" step="0.1" value="0" style="width:64px" /> m</label>
+        <label>Richtung <input id="secDir" type="number" step="5" value="0" style="width:64px" /> °</label>
+        <label>Dicke <select id="secThick"><option value="0.02">2 cm</option><option value="0.05" selected>5 cm</option>
+          <option value="0.1">10 cm</option><option value="0.3">30 cm</option></select></label>
+      </div>
+      <div class="btnrow">
+        <button id="secRedo" class="secondary">Neu berechnen</button>
+        <button id="secFromPicks" class="secondary" title="Schnittlinie durch die zwei Messpunkte (Werkzeug „Messen“)">aus Messpunkten</button>
+        <button id="secWalls" class="secondary" title="Richtung an den erkannten Wänden ausrichten">an Wänden ausrichten</button>
+        <button id="secTurn" class="secondary" title="Schnittrichtung um 90° drehen">+90°</button>
+      </div>
+      <div class="btnrow">
+        <button id="secDxf" class="primary">DXF (CAD)</button>
+        <button id="secSvg" class="secondary">SVG</button>
+        <button id="secPng" class="secondary">Bild (PNG)</button>
+      </div>
+    </div>
+  </div>
 
   <div id="floorDlg" class="dialog hidden">
     <div class="dialog-box">
@@ -116,6 +142,7 @@
             <option value="3">einfarbig</option>
             <option value="4">Drehwinkel (Diagnose)</option>
             <option value="5">Scan-Nummer (überlagert)</option>
+            <option value="6">Abweichung zwischen Scans</option>
           </select>
         </label>
         <label title="Mischpunkte an Kanten („in der Luft“ zwischen Vorder- und Hintergrund) und Einzelausreißer weglassen; gilt für Live und gespeicherte Scans">
@@ -195,6 +222,7 @@
         <button id="btnPly" class="secondary" title="Sichtbare Punkte (mit Höhenschnitt) als binäres PLY">PLY (sichtbar)</button>
         <button id="btnLas" class="secondary" title="Sichtbare Punkte als LAS 1.2 (CloudCompare, QGIS)">LAS (sichtbar)</button>
         <button id="btnPng" class="secondary" title="Aktuelle 3D-Ansicht als Bild">Bild (PNG)</button>
+        <button id="btnSection" class="secondary" title="Senkrechter Schnitt durch die Wolke (Wandansicht, Höhen), als DXF/SVG/PNG">&#9986; Schnitt</button>
         <button id="btnFloor" class="secondary" title="Senkrechte Wände erkennen, als DXF/SVG">&#128208; Grundriss</button>
       </div>
 
@@ -235,11 +263,12 @@
     </section>
   </main>
 
-  <script src="js/viewer2d.js?v=20261127z"></script>
-  <script src="js/viewer3d.js?v=20261127z"></script>
-  <script src="js/export.js?v=20261127z"></script>
-  <script src="js/floorplan.js?v=20261127z"></script>
-  <script src="js/registration.js?v=20261127z"></script>
-  <script src="js/app.js?v=20261127z"></script>
+  <script src="js/viewer2d.js?v=20261128a"></script>
+  <script src="js/viewer3d.js?v=20261128a"></script>
+  <script src="js/export.js?v=20261128a"></script>
+  <script src="js/section.js?v=20261128a"></script>
+  <script src="js/floorplan.js?v=20261128a"></script>
+  <script src="js/registration.js?v=20261128a"></script>
+  <script src="js/app.js?v=20261128a"></script>
 </body>
 </html>

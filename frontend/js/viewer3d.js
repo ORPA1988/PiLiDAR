@@ -19,7 +19,7 @@ void main(){
   float v = aInt;                                   // 0: Intensität
   if (uMode == 1) v = aPos.z;                       // 1: Höhe
   else if (uMode == 2) v = length(aPos);            // 2: Entfernung zum Scanner
-  else if (uMode == 4) v = aZa;                     // 4: Drehwinkel (Diagnose: Naht, Lücken)
+  else if (uMode == 4 || uMode == 6) v = aZa;       // 4: Drehwinkel; 6: Abweichung zum anderen Scan [m]
   else if (uMode == 5) v = aSrc;                    // 5: Scan-Nummer (überlagerte Scans)
   vVal = (v - uRange.x) / max(uRange.y - uRange.x, 1e-6);
   vCut = (aPos.z < uClip.x || aPos.z > uClip.y) ? 1.0 : 0.0;
@@ -349,7 +349,58 @@ class Viewer3D {
   }
 
   // --- Farbe / Schnitt -----------------------------------------------------
-  setColorMode(m) { this.colorMode = m; this._updateLegend(); }
+  setColorMode(m) {
+    const was = this.colorMode === 6, now = m === 6;
+    if (was !== now) {                                  // Puffer umschalten: Drehwinkel <-> Abweichung
+      const gl = this.gl;
+      for (const c of this.chunks) {
+        const data = now ? (c.diff || new Float32Array(c.count)) : c.za;
+        gl.bindBuffer(gl.ARRAY_BUFFER, c.zaBuf); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+      }
+    }
+    this.colorMode = m; this._updateLegend();
+  }
+
+  /* Abweichung je Punkt zum jeweils anderen Scan (src 0 gegen alle übrigen und umgekehrt), in Metern,
+   * bei maxD gekappt. Vergleich über 5-cm-Würfel (je Würfel ein Punkt). */
+  computeDiff(maxD = 0.10) {
+    this._flush();
+    const cell = 0.05, K = 8192, H = K / 2;
+    const key = (x, y, z) => ((Math.floor(z / cell) + H) * K + Math.floor(y / cell) + H) * K + Math.floor(x / cell) + H;
+    const vox = [new Map(), new Map()];                 // 0: Scan 0, 1: alle anderen
+    for (const c of this.chunks) for (let i = 0, j = 0; i < c.pos.length; i += 3, j++) {
+      const m = vox[c.src[j] === 0 ? 0 : 1], k = key(c.pos[i], c.pos[i + 1], c.pos[i + 2]);
+      if (!m.has(k)) m.set(k, [c.pos[i], c.pos[i + 1], c.pos[i + 2]]);
+    }
+    if (!vox[0].size || !vox[1].size) throw new Error('Zum Vergleichen zwei Scans laden (zweiten mit „+“)');
+    const R = Math.ceil(maxD / cell), dist = [new Map(), new Map()];
+    for (let side = 0; side < 2; side++) {
+      const other = vox[1 - side];
+      for (const [k, p] of vox[side]) {
+        let best = maxD * maxD;
+        if (other.has(k)) best = 0;                     // gleicher Würfel belegt -> keine Abweichung
+        else for (let dz = -R; dz <= R; dz++) for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+          const q = other.get(k + (dz * K + dy) * K + dx);
+          if (!q) continue;
+          const d = (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2 + (q[2] - p[2]) ** 2;
+          if (d < best) best = d;
+        }
+        dist[side].set(k, Math.sqrt(best));
+      }
+    }
+    let changed = 0, total = 0;
+    for (const c of this.chunks) {
+      c.diff = new Float32Array(c.count);
+      for (let i = 0, j = 0; i < c.pos.length; i += 3, j++) {
+        const d = dist[c.src[j] === 0 ? 0 : 1].get(key(c.pos[i], c.pos[i + 1], c.pos[i + 2])) || 0;
+        c.diff[j] = d; total++; if (d >= 0.05) changed++;
+      }
+    }
+    this.diffMax = maxD;
+    if (this.colorMode === 6) { this.colorMode = 4; }   // Puffer neu laden
+    this.setColorMode(6);
+    return { changed, total, share: total ? changed / total : 0 };
+  }
   setPointSize(s) { this.pointSize = s; }
   setClip(zmin, zmax) { this.clip = [zmin, zmax]; this._updateLegend(); }
 
@@ -359,15 +410,16 @@ class Viewer3D {
     if (!b) return [0, 1];
     if (this.colorMode === 1) return [Math.max(b.min[2], this.clip[0]), Math.min(b.max[2], this.clip[1])];
     if (this.colorMode === 4) return [0, Math.max(this.zaMax, 1)];
+    if (this.colorMode === 6) return [0, this.diffMax || 0.1];
     if (this.colorMode === 5) return [0, 1];                      // Shader nutzt die Nummer direkt
     return [0, Math.min(Math.sqrt(b.rmax), 10)];
   }
 
   _updateLegend() {
     if (!this._legendEl) return;
-    const names = ['Intensität', 'Höhe [m]', 'Entfernung [m]', 'einfarbig', 'Drehwinkel [°]', 'Scan Nr.'];
+    const names = ['Intensität', 'Höhe [m]', 'Entfernung [m]', 'einfarbig', 'Drehwinkel [°]', 'Scan Nr.', 'Abweichung [m]'];
     const r = this._range();
-    const fmt = v => (this.colorMode === 0 || this.colorMode >= 4) ? v.toFixed(0) : v.toFixed(2);
+    const fmt = v => (this.colorMode === 0 || this.colorMode === 4 || this.colorMode === 5) ? v.toFixed(0) : v.toFixed(2);
     const pal = ['#ff9a1a', '#33ccff', '#f24dcc', '#99f24d', '#f2f2f2', '#6673ff'];
     if (this.colorMode === 5) {
       this._legendEl.innerHTML = `<span>${names[5]}</span> ` + Array.from({ length: this.nSources }, (_, k) =>
