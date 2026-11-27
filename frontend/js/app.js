@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127h';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127i';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -283,6 +283,7 @@ async function poll() {
     if (sys.available) {
       $('stCpu').textContent = sys.cpu_percent.toFixed(1);
       $('stRam').textContent = sys.ram_percent.toFixed(1);
+      if (sys.disk) $('stDisk').textContent = `${sys.disk.free_gb} GB (${(100 - sys.disk.percent).toFixed(0)} %)`;
       const eth = sys.net.eth0 || sys.net.end0 || sys.net.wlan0 || {};
       const bt  = sys.net.bnep0 || {};
       const parts = [];

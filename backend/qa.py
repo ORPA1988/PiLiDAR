@@ -79,8 +79,22 @@ def compute_qa(frames, lidar_stats: dict, geom: dict, lidar_cfg: dict,
         overlap_deg,
     )
 
+    # Datenlücken: Pausen im LiDAR-Strom während des Laufs (Kopf dreht weiter -> Streifen ohne Punkte)
+    t = np.asarray(frames.get("t", np.zeros(0)), dtype=float)
+    gaps = []
+    if t.size > 1:
+        dt = np.diff(t)
+        idx = np.nonzero(dt > 0.05)[0]
+        z = np.asarray(frames["z_angle"], dtype=float)
+        gaps = [{"z_deg": round(float(z[i]), 2), "ms": round(float(dt[i]) * 1000)} for i in idx[:20]]
+    qa["data_gaps"] = gaps
+
     # Ampel
     flags = []
+    if gaps:
+        worst = max(g["ms"] for g in gaps)
+        flags.append(("warn" if worst < 200 else "error",
+                      f"{len(gaps)} Datenlücke(n) im LiDAR-Strom, längste {worst} ms (Streifen ohne Punkte)"))
     if qa["crc_error_rate"] > 0.02:
         flags.append(("error", "Hohe CRC-Fehlerrate (Verkabelung/Baudrate/EMV)"))
     elif qa["crc_error_rate"] > 0.005:

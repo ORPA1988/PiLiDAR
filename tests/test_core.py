@@ -149,6 +149,19 @@ def test_recorder():
     print("OK  FrameRecorder (Blöcke, Felder, Leeren)")
 
 
+def test_qa_gaps():
+    from backend.qa import compute_qa
+    n = 3000
+    t = np.arange(n) / 1800.0
+    t[1500:] += 0.3                                  # 300-ms-Lücke in der Mitte
+    fr = {"z_angle": np.linspace(0, 184, n), "angles": np.zeros((n, 12)), "distances": np.zeros((n, 12)),
+          "intensities": np.zeros((n, 12)), "speed_dps": np.full(n, 3600.0), "t": t}
+    qa = compute_qa(fr, {"crc_error_rate": 0, "packet_rate": 1800}, {}, {}, 184.0, 4.0)
+    assert len(qa["data_gaps"]) == 1 and qa["data_gaps"][0]["ms"] == 301, qa["data_gaps"]
+    assert qa["status"] == "error" and "Datenlücke" in qa["messages"][0]
+    print("OK  QA erkennt Datenlücken")
+
+
 def test_pointcloud_geometry():
     from backend.pointcloud import build_pointcloud
     # Ein Punkt bei Winkel 0°, Distanz 1000 mm, z_angle 90° -> erwartete Lage prüfen
@@ -216,6 +229,7 @@ if __name__ == "__main__":
     test_motor_commands()
     test_vectorized_equals_reference()
     test_recorder()
+    test_qa_gaps()
     test_pointcloud_geometry()
     test_mock_scan()
     print("\nAlle Trockentests bestanden.")

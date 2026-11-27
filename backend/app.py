@@ -201,7 +201,13 @@ async def api_system_stats():
             _net_prev[iface] = (c.bytes_sent, c.bytes_recv, now)
     except Exception:
         pass
-    return {"available": True, "cpu_percent": cpu, "ram_percent": ram, "net": net}
+    disk = None
+    try:
+        du = _psutil.disk_usage(str(controller.store.base))
+        disk = {"free_gb": round(du.free / 1e9, 1), "percent": du.percent}
+    except Exception:
+        pass
+    return {"available": True, "cpu_percent": cpu, "ram_percent": ram, "net": net, "disk": disk}
 
 
 @app.post("/api/system/reboot")
