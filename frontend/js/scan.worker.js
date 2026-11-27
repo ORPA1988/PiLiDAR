@@ -9,7 +9,7 @@
  */
 'use strict';
 
-let cfg = { angle_offset: 0, model_y: 0, model_z: 0, dist_min: 30, dist_max: 25000, edge_filter: false, z_scale: 1 };
+let cfg = { angle_offset: 0, model_y: 0, model_z: 0, dist_min: 30, dist_max: 25000, edge_filter: false, z_scale: 1, half_yaw: 0 };
 let edgeRemoved = 0;   // vom Kantenfilter verworfene Punkte (seit dem letzten Leeren)
 
 let allXYZ = [];   // Float32Array-Blöcke für den Export
@@ -29,7 +29,9 @@ function transformBlock(z, a, d, it, f0, n) {
   const za = new Float32Array(n * 12);              // Drehwinkel je Punkt (Diagnose-Farbe)
   let k = 0;
   for (let f = f0; f < f0 + n; f++) {
-    const zr = -z[f] * cfg.z_scale * D2R, cz = Math.cos(zr), sz = Math.sin(zr);   // z_scale: Drehfaktor
+    // Drehwinkel; die beiden Fächerhälften (px > 0 / < 0) um ±half_yaw/2 gegeneinander verdreht
+    const zr0 = -z[f] * cfg.z_scale * D2R, hy = cfg.half_yaw * 0.5 * D2R;
+    const czF = Math.cos(zr0 + hy), szF = Math.sin(zr0 + hy), czB = Math.cos(zr0 - hy), szB = Math.sin(zr0 - hy);
     for (let j = f * 12; j < f * 12 + 12; j++) {
       const dd = d[j];
       if (dd < dmin || dd > dmax) continue;
@@ -44,7 +46,7 @@ function transformBlock(z, a, d, it, f0, n) {
       const px0 = dd * Math.cos(ang), pz0 = -dd * Math.sin(ang);   // 270° -> +Z (oben)
       const px = px0 * caO + pz0 * saO;                            // Y-Rotation
       const pz = -px0 * saO + pz0 * caO + oz;
-      const py = oy;
+      const py = oy, cz = px > 0 ? czF : czB, sz = px > 0 ? szF : szB;
       xyz[k * 3] = (px * cz - py * sz) / 1000;                     // Z-Rotation, mm -> m
       xyz[k * 3 + 1] = (px * sz + py * cz) / 1000;
       xyz[k * 3 + 2] = pz / 1000;
@@ -81,7 +83,7 @@ function unpack(buf, withSpeed) {
 self.onmessage = (ev) => {
   const msg = ev.data;
   if (msg.type === 'init') {
-    for (const k of ['angle_offset', 'model_y', 'model_z', 'dist_min', 'dist_max', 'z_scale'])
+    for (const k of ['angle_offset', 'model_y', 'model_z', 'dist_min', 'dist_max', 'z_scale', 'half_yaw'])
       if (typeof msg[k] === 'number') cfg[k] = msg[k];
     if (typeof msg.edge_filter === 'boolean') cfg.edge_filter = msg.edge_filter;
   } else if (msg.type === 'batch') {               // Live: Bündel vom WebSocket

@@ -286,9 +286,10 @@ class ScanController:
         lcfg = self.cfg.LIDAR
         pos = (0.0, geom["MODEL_Y_OFFSET"], geom["MODEL_Z_OFFSET"])
         zsc = float(geom.get("Z_SCALE", 1.0))
+        hyaw = float(geom.get("HALF_YAW", 0.0))
         # Server-Referenz-Punktwolke (Client rechnet ebenfalls; hier für Export/QA)
         pts, inten = build_pointcloud(frames, lcfg["ANGLE_OFFSET"], pos,
-                                      lcfg["DISTANCE_MIN_MM"], lcfg["DISTANCE_MAX_MM"], z_scale=zsc)
+                                      lcfg["DISTANCE_MIN_MM"], lcfg["DISTANCE_MAX_MM"], z_scale=zsc, half_yaw=hyaw)
         self.store.save_raw_frames(scan_id, frames, self.cfg.STORAGE.get("RAW_FORMATS", ["npy"]))
         self.store.save_pointcloud(scan_id, pts, inten, self.cfg.STORAGE.get("POINTCLOUD_FORMATS", ["ply"]))
         stats = {

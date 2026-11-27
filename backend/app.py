@@ -305,6 +305,11 @@ async def api_config_apply(payload: dict):
         if not 0.8 <= k <= 1.2:
             return JSONResponse(status_code=400, content={"ok": False, "error": "Drehfaktor außerhalb 0,8…1,2"})
         geom["Z_SCALE"] = k
+    if "half_yaw" in payload:   # Verdrehung der beiden LiDAR-Hälften gegeneinander [°]
+        h = float(payload["half_yaw"])
+        if not -10.0 <= h <= 10.0:
+            return JSONResponse(status_code=400, content={"ok": False, "error": "Hälften-Verdrehung außerhalb ±10°"})
+        geom["HALF_YAW"] = h
     if geom:
         config.update_section("GEOMETRY", geom)
     if "angle_offset" in payload:
