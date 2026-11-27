@@ -201,12 +201,12 @@ const Registration = (() => {
   }
 
   /* --- ICP (yaw, tx, ty, tz) ---------------------------------------------------- */
-  function icp(refXYZ, movXYZ, init, grids) {
+  function icp(refXYZ, movXYZ, init, grids, stages = [0.5, 0.2, 0.08]) {
     let { yaw, tx, ty, tz = 0 } = init;
     const n = movXYZ.length / 3;
-    for (const stage of [0.5, 0.2, 0.08]) {
+    for (const stage of stages) {
       const g = grids[stage] || (grids[stage] = buildGrid(refXYZ, stage));
-      for (let it = 0; it < 25; it++) {
+      for (let it = 0; it < 20; it++) {
         const c = Math.cos(yaw), s = Math.sin(yaw);
         let cnt = 0, px = 0, py = 0, pz = 0, qx = 0, qy = 0, qz = 0;
         const P = [], Q = [];
@@ -259,14 +259,26 @@ const Registration = (() => {
     let cands = opts.init ? [opts.init] : coarse(refW, movW, opts, f => progress(0.6 * f, 'Grobsuche'));
     if (!opts.init) cands.push({ yaw: 0, tx: 0, ty: 0 });     // „nicht bewegt“ immer mitprüfen
     if (!cands.length) throw new Error('Zu wenige Wände für die Ausrichtung');
-    const grids = {}, results = [];
-    cands.forEach((cd, k) => {
-      results.push({ ...icp(refXYZ, movS, cd, grids), coarseScore: cd.score || 0 });
-      progress(0.6 + 0.4 * (k + 1) / cands.length, 'Feinausrichtung');
+    // Vorlauf: alle Kandidaten grob mit wenigen Punkten, dann nur die besten zwei fein
+    const grids = {}, few = subsample(movXYZ, Math.min(2500, movXYZ.length / 3), 3);
+    let pre = cands.map((cd, k) => {
+      const r = icp(refXYZ, few, cd, grids, [0.5, 0.2]);
+      progress(0.6 + 0.2 * (k + 1) / cands.length, 'Vorauswahl');
+      return r;
+    });
+    pre.sort((a, b) => b.overlap - a.overlap);
+    const distinct = [];                                       // gleiche Lösungen zusammenfassen
+    for (const r of pre)
+      if (distinct.every(d => Math.abs(angDiff(d.yaw, r.yaw)) > 3 * Math.PI / 180 || Math.hypot(d.tx - r.tx, d.ty - r.ty) > 0.2))
+        distinct.push(r);
+    const results = distinct.slice(0, 2).map((cd, k) => {
+      const r = icp(refXYZ, movS, cd, grids, [0.2, 0.08]);
+      progress(0.8 + 0.2 * (k + 1) / Math.min(2, distinct.length), 'Feinausrichtung');
+      return r;
     });
     results.sort((a, b) => (b.overlap - a.overlap) || ((a.rmse || 1) - (b.rmse || 1)));
     const best = results[0];
-    return { ...best, yawDeg: best.yaw * 180 / Math.PI, candidates: results.length,
+    return { ...best, yawDeg: best.yaw * 180 / Math.PI, candidates: cands.length, distinct: distinct.length,
              second: results[1] ? results[1].overlap : 0, wallCells: [refW.length / 2, movW.length / 2], ms: Date.now() - t0 };
   }
 

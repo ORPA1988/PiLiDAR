@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127n';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127p';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -109,7 +109,8 @@ function connectWS() {
     if (step > 0 && step < 5) lidarResDeg = step;
     for (let f = 0; f < n; f++)                   // 2D: Nachleuchten je Winkelsegment
       v2d.addFrame(a.subarray(f * 12, f * 12 + 12), d.subarray(f * 12, f * 12 + 12));
-    worker.postMessage({ type: 'batch', buf }, [buf]);
+    // gespeicherte Scans in 3D: Live-Punkte nicht hineinmischen (erst „Leeren“ zeigt wieder live)
+    if (!loadedScans.length) worker.postMessage({ type: 'batch', buf }, [buf]);
   };
   ws.onclose = () => setTimeout(connectWS, 1500);
 }
