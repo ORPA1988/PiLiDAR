@@ -96,6 +96,11 @@ Güte: Überdeckung (Punkte mit Nachbar < 10 cm) und Abweichung. Als **Projekt**
 ausgerichtete Wolke, der Grundriss zeigt alle Scannerstandorte. **Von Hand:** Scan wählen, mit
 Pfeilen/Drehknöpfen (1 cm/0,5° bis 20 cm/10°) oder Zahlen verschieben, dann „Feinausrichten ab hier“.
 
+**Offsets von Hand** (Kalibrierung → „Offsets von Hand“): Winkel, y, z eingeben, mit „Mit Scan prüfen“
+die Überlappung (mm) an einem gespeicherten Scan berechnen (`/api/calibrate/check`), dann übernehmen.
+y ist der Abstand der Scan-Ebene von der Abtriebsachse, nicht von der Motorwelle.
+**Kantenpunkte filtern** (3D-Darstellung): Punkte, die von beiden Winkel-Nachbarn weit abweichen, weglassen.
+
 **Bedienfehler** kommen als HTTP 409 mit `{"error": "…"}` und erscheinen unten rechts.
 
 **Frontend-Updates:** Versionskennung `?v=…` in `frontend/index.html` und `ASSET_VERSION` in
