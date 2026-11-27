@@ -20,18 +20,14 @@ except Exception:  # pragma: no cover
 
 def _profile(frames, n_bins=720):
     """Mittlere Distanz je Winkel-Bin über alle Frames – robustes 1D-Profil."""
-    acc = np.zeros(n_bins)
-    cnt = np.zeros(n_bins)
-    for fr in frames:
-        a = np.asarray(fr["angles"]) % 360.0
-        d = np.asarray(fr["distances"], dtype=float)
-        idx = (a / 360.0 * n_bins).astype(int) % n_bins
-        for j, dd in zip(idx, d):
-            if dd > 0:
-                acc[j] += dd
-                cnt[j] += 1
-    prof = np.where(cnt > 0, acc / np.maximum(cnt, 1), 0.0)
-    return prof
+    arr = frames_to_arrays(frames)
+    a = np.asarray(arr["angles"], dtype=float).ravel() % 360.0
+    d = np.asarray(arr["distances"], dtype=float).ravel()
+    m = d > 0
+    idx = (a[m] / 360.0 * n_bins).astype(int) % n_bins
+    acc = np.bincount(idx, weights=d[m], minlength=n_bins)
+    cnt = np.bincount(idx, minlength=n_bins)
+    return np.where(cnt > 0, acc / np.maximum(cnt, 1), 0.0)
 
 
 def calibrate_rotation(frames_360, nominal_gear_ratio: float) -> dict:
@@ -41,15 +37,16 @@ def calibrate_rotation(frames_360, nominal_gear_ratio: float) -> dict:
     wieder dem bei z≈0° entsprechen. Wir korrelieren beide Profile und leiten
     daraus einen Skalierungsfaktor für die kommandierten gegen die realen Grad ab.
     """
-    if not frames_360:
+    arr = frames_to_arrays(frames_360)
+    z = np.asarray(arr["z_angle"], dtype=float)
+    if z.size == 0:
         return {"ok": False, "reason": "keine Daten"}
-    z = np.array([fr["z_angle"] for fr in frames_360], dtype=float)
     zmax = float(z.max())
     if zmax < 300:
         return {"ok": False, "reason": "Kalibrierscan deckt keine ~360° ab"}
-    early = [fr for fr, zz in zip(frames_360, z) if zz <= 10]
-    late = [fr for fr, zz in zip(frames_360, z) if zz >= zmax - 10]
-    if len(early) < 5 or len(late) < 5:
+    early = select_frames(arr, -1e9, 10)
+    late = select_frames(arr, zmax - 10, 1e9)
+    if len(early["z_angle"]) < 5 or len(late["z_angle"]) < 5:
         return {"ok": False, "reason": "zu wenige Frames in Überlappung"}
     p0 = _profile(early)
     p1 = _profile(late)

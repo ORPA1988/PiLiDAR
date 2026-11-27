@@ -201,38 +201,43 @@ class LidarReader:
         return self._running.is_set()
 
     # ------------------------------------------------------------------
-    def _read_exact(self, n: int) -> bytes:
-        buf = self._ser.read(n)
-        return buf
-
     def _loop(self) -> None:
+        """Blockweise lesen und Pakete im Puffer suchen.
+
+        Früher wurde Byte für Byte gelesen (~90 000 Python-Aufrufe/s). Jetzt wird
+        alles Anstehende auf einmal geholt; das senkt die CPU-Last und übersteht
+        kurze Pausen des Threads, solange der Kernel-Puffer reicht."""
         ser = self._ser
+        buf = bytearray()
+        hdr = bytes((HEADER, VERLEN))
         while self._running.is_set():
-            # Auf Header synchronisieren
-            b = ser.read(1)
-            if not b:
+            waiting = getattr(ser, "in_waiting", 0) or 0
+            chunk = ser.read(max(PACKET_LEN, min(waiting, 65536)))
+            if not chunk:
                 continue
-            self.stats.bytes_read += 1
-            if b[0] != HEADER:
-                continue
-            b2 = ser.read(1)
-            if not b2 or b2[0] != VERLEN:
-                continue
-            rest = self._read_exact(PACKET_LEN - 2)
-            if len(rest) != PACKET_LEN - 2:
-                continue
-            packet = bytes((HEADER, VERLEN)) + rest
-            self.stats.bytes_read += len(rest)
-
-            if crc8(packet[:PACKET_LEN - 1]) != packet[PACKET_LEN - 1]:
-                self.stats.packets_crc_fail += 1
-                continue
-
-            frame = self._decode(packet)
-            self.stats.packets_ok += 1
-            self.stats.last_speed_dps = frame.speed_dps
-            if self.on_frame is not None:
-                self.on_frame(frame)
+            self.stats.bytes_read += len(chunk)
+            buf += chunk
+            pos = 0
+            while True:
+                i = buf.find(hdr, pos)
+                if i < 0:
+                    pos = max(pos, len(buf) - 1)   # evtl. halber Kopf am Ende behalten
+                    break
+                if i + PACKET_LEN > len(buf):
+                    pos = i
+                    break
+                packet = bytes(buf[i:i + PACKET_LEN])
+                if crc8(packet[:PACKET_LEN - 1]) != packet[PACKET_LEN - 1]:
+                    self.stats.packets_crc_fail += 1
+                    pos = i + 1                    # weitersuchen (Kopf-Bytes im Datenfeld möglich)
+                    continue
+                pos = i + PACKET_LEN
+                frame = self._decode(packet)
+                self.stats.packets_ok += 1
+                self.stats.last_speed_dps = frame.speed_dps
+                if self.on_frame is not None:
+                    self.on_frame(frame)
+            del buf[:pos]
 
     # ------------------------------------------------------------------
     def _decode(self, p: bytes) -> Frame:

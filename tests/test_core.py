@@ -132,6 +132,23 @@ def test_vectorized_equals_reference():
     print(f"OK  vektorisierte Punktwolke = Referenz ({len(pts)} Punkte)")
 
 
+def test_recorder():
+    from backend.recorder import FrameRecorder
+    import backend.recorder as rmod
+    old = rmod._CHUNK; rmod._CHUNK = 7          # kleine Blöcke -> Blockwechsel testen
+    try:
+        r = FrameRecorder()
+        for k in range(20):
+            r.append(k * 0.5, [k] * 12, [100 + k] * 12, [k % 256] * 12, 3600.0, k, 1000.0 + k)
+        a = r.arrays()
+        assert len(r) == 20 and a["z_angle"].shape == (20,) and a["angles"].shape == (20, 12)
+        assert a["z_angle"][19] == 9.5 and a["distances"][19, 0] == 119 and a["t"][0] == 1000.0
+        r.clear(); assert len(r) == 0 and len(r.arrays()["z_angle"]) == 0
+    finally:
+        rmod._CHUNK = old
+    print("OK  FrameRecorder (Blöcke, Felder, Leeren)")
+
+
 def test_pointcloud_geometry():
     from backend.pointcloud import build_pointcloud
     # Ein Punkt bei Winkel 0°, Distanz 1000 mm, z_angle 90° -> erwartete Lage prüfen
@@ -198,6 +215,7 @@ if __name__ == "__main__":
     test_decode()
     test_motor_commands()
     test_vectorized_equals_reference()
+    test_recorder()
     test_pointcloud_geometry()
     test_mock_scan()
     print("\nAlle Trockentests bestanden.")

@@ -13,6 +13,7 @@ from datetime import datetime
 
 from .calibration import calibrate_offset, calibrate_rotation
 from .pointcloud import frames_to_arrays
+from .recorder import FrameRecorder
 from .config import Config
 from .hardware.lidar import Frame, LidarReader
 from .hardware.stepper import Stepper
@@ -73,7 +74,7 @@ class ScanController:
 
         self.state = STATE_IDLE
         self.current_scan_id: str | None = None
-        self._frames: list[dict] = []          # gesammelte Frames des aktuellen Laufs
+        self._rec = FrameRecorder()             # Frames des aktuellen Laufs (kompakt, numpy)
         self._recording = False
         self._lock = threading.Lock()
 
@@ -133,16 +134,8 @@ class ScanController:
         self._last_frame = msg
         self._recent.append(msg)
         if self._recording:
-            with self._lock:
-                self._frames.append({
-                    "z_angle": fr.z_angle,
-                    "angles": fr.angles,
-                    "distances": fr.distances,
-                    "intensities": fr.intensities,
-                    "speed_dps": fr.speed_dps,
-                    "timestamp_ms": fr.timestamp_ms,
-                    "t": fr.recv_time,
-                })
+            self._rec.append(fr.z_angle, fr.angles, fr.distances, fr.intensities,
+                             fr.speed_dps, fr.timestamp_ms, fr.recv_time)
         if self._loop is not None:
             for q in list(self._subscribers):
                 try:
@@ -160,7 +153,7 @@ class ScanController:
             "stepper_backend": "esp32" if isinstance(self.stepper, Esp32Stepper) else "gpio",
             "stepper_connected": bool(getattr(self.stepper, "connected", True)),
             "position_lost": bool(getattr(self.stepper, "position_lost", False)),
-            "frames": len(self._frames),
+            "frames": len(self._rec),
             "stats": {
                 "packets_ok": self.lidar.stats.packets_ok,
                 "crc_error_rate": round(self.lidar.stats.crc_error_rate, 4),
@@ -205,8 +198,7 @@ class ScanController:
             scan_id += "_" + "".join(c for c in name if c.isalnum() or c in "-_")
         self.current_scan_id = scan_id
         self.store.create(scan_id)
-        with self._lock:
-            self._frames = []
+        self._rec.clear()
         self._worker = threading.Thread(target=self._run_scan, args=(mode, scan_id),
                                         daemon=True, name="ScanRun")
         self.state = STATE_SCANNING
@@ -278,7 +270,7 @@ class ScanController:
 
     def _finalize(self, scan_id, mode, scan_angle, overlap, t0) -> None:
         with self._lock:
-            frames = frames_to_arrays(list(self._frames))  # einmal umwandeln, dann vektorisiert
+            frames = self._rec.arrays()
         geom = self.cfg.GEOMETRY
         lcfg = self.cfg.LIDAR
         pos = (0.0, geom["MODEL_Y_OFFSET"], geom["MODEL_Z_OFFSET"])
@@ -334,8 +326,7 @@ class ScanController:
             self.stepper.home()
             self.lidar.start()
             time.sleep(0.3)
-            with self._lock:
-                self._frames = []
+            self._rec.clear()
             self._recording = True
             cfg = self.cfg.MODE_B_CONTINUOUS
             self.stepper.start_continuous(cfg["SPEED_DPS"], cfg["ACCEL_DPS2"], direction=1)
@@ -344,8 +335,7 @@ class ScanController:
             self.stepper.stop_continuous(ramp_down=True)
             self._recording = False
             self.lidar.stop()
-            with self._lock:
-                frames = list(self._frames)
+            frames = self._rec.arrays()
             result = calibrate_rotation(frames, self.cfg.STEPPER["GEAR_RATIO"])
         finally:
             self.stepper.home()
@@ -365,8 +355,7 @@ class ScanController:
             self.stepper.home()
             self.lidar.start()
             time.sleep(0.3)
-            with self._lock:
-                self._frames = []
+            self._rec.clear()
             self._recording = True
             cfg = self.cfg.MODE_B_CONTINUOUS
             self.stepper.start_continuous(cfg["SPEED_DPS"], cfg["ACCEL_DPS2"], direction=1)
@@ -375,8 +364,7 @@ class ScanController:
             self.stepper.stop_continuous(ramp_down=True)
             self._recording = False
             self.lidar.stop()
-            with self._lock:
-                frames = list(self._frames)
+            frames = self._rec.arrays()
             geom = self.cfg.GEOMETRY
             lcfg = self.cfg.LIDAR
             pos = (0.0, geom["MODEL_Y_OFFSET"], geom["MODEL_Z_OFFSET"])
