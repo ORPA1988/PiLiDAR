@@ -187,7 +187,7 @@ class ScanController:
             raise RuntimeError(f"Beschäftigt: {self.state}")
         self.stepper.confirm_home()
 
-    MAX_SCAN_ANGLE = 270.0   # LiDAR-Kabel: nicht weiter drehen
+    MAX_SCAN_ANGLE = 380.0   # LiDAR-Kabel: hoechstens gut eine Umdrehung (370°-Kalibrierlauf)
 
     def start_scan(self, mode: str = "B", name: str = "", scan_angle: float | None = None,
                    overlap_deg: float | None = None) -> str:
