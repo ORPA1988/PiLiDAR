@@ -61,7 +61,10 @@ def main():
     for y in ys:
         pa, _ = build_pointcloud(a_sel, ang, (0.0, float(y), 0.0), max(lc["DISTANCE_MIN_MM"], rmin), 8000)
         pb, _ = build_pointcloud(b_sel, ang, (0.0, float(y), 0.0), lc["DISTANCE_MIN_MM"], 8000)
-        res[y] = plane_residual(np.asarray(pa), np.asarray(pb))
+        pa = np.asarray(pa)
+        if y == ys[0]:   # feste Stichprobe (Reihenfolge/Anzahl der Anfangspunkte hängt nicht von y ab)
+            pick = np.random.default_rng(0).choice(len(pa), min(5000, len(pa)), replace=False)
+        res[y] = plane_residual(pa[pick], np.asarray(pb))
     n = min(len(r) for r in res.values())
     common = np.ones(n, bool)
     for r in res.values():
