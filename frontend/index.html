@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PiLiDAR 2.0</title>
-  <link rel="stylesheet" href="css/style.css?v=20261128a" />
+  <link rel="stylesheet" href="css/style.css?v=20261128b" />
 </head>
 <body>
   <header>
@@ -143,6 +143,7 @@
             <option value="4">Drehwinkel (Diagnose)</option>
             <option value="5">Scan-Nummer (überlagert)</option>
             <option value="6">Abweichung zwischen Scans</option>
+            <option value="7">Flächen (Boden, Decke, Wand …)</option>
           </select>
         </label>
         <label title="Mischpunkte an Kanten („in der Luft“ zwischen Vorder- und Hintergrund) und Einzelausreißer weglassen; gilt für Live und gespeicherte Scans">
@@ -161,6 +162,7 @@
           <button class="secondary view-btn" data-view="iso">Schräg</button>
         </div>
         <button id="btnMeasure" class="secondary" title="Zwei Punkte anklicken: Abstand">&#128207; Messen</button>
+        <div id="surfInfo" class="hint"></div>
         <div class="hint">Ziehen = drehen · Rechts/Umschalt = verschieben · Rad = Zoom · Doppelklick = zentrieren</div>
       </div>
 
@@ -263,12 +265,13 @@
     </section>
   </main>
 
-  <script src="js/viewer2d.js?v=20261128a"></script>
-  <script src="js/viewer3d.js?v=20261128a"></script>
-  <script src="js/export.js?v=20261128a"></script>
-  <script src="js/section.js?v=20261128a"></script>
-  <script src="js/floorplan.js?v=20261128a"></script>
-  <script src="js/registration.js?v=20261128a"></script>
-  <script src="js/app.js?v=20261128a"></script>
+  <script src="js/viewer2d.js?v=20261128b"></script>
+  <script src="js/viewer3d.js?v=20261128b"></script>
+  <script src="js/export.js?v=20261128b"></script>
+  <script src="js/surfaces.js?v=20261128b"></script>
+  <script src="js/section.js?v=20261128b"></script>
+  <script src="js/floorplan.js?v=20261128b"></script>
+  <script src="js/registration.js?v=20261128b"></script>
+  <script src="js/app.js?v=20261128b"></script>
 </body>
 </html>

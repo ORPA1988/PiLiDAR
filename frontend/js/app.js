@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261128a';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261128b';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -243,6 +243,16 @@ $('secPng').onclick = () => { const a = document.createElement('a'); a.href = $(
 // --- 3D-Darstellung ----------------------------------------------------
 $('colorMode').onchange = () => {
   const m = +$('colorMode').value;
+  $('surfInfo').textContent = '';
+  if (m === 7) {                                      // Flächen erkennen und nach Art färben
+    try {
+      const t0 = performance.now(), r = Surfaces.classify(v3d);
+      v3d.colorMode = 0; v3d.setColorMode(7);
+      $('surfInfo').textContent = 'Gesehene Flächen: ' + (Surfaces.describe(r).join(' · ') || 'keine ebenen Flächen erkannt') +
+        ` (${Math.round(performance.now() - t0)} ms; verdeckte Bereiche fehlen).`;
+    } catch (e) { toast(e.message); $('colorMode').value = '0'; v3d.setColorMode(0); }
+    return;
+  }
   if (m !== 6) { v3d.setColorMode(m); return; }
   try {                                               // Abweichung zwischen Scan 0 und den dazugeladenen
     const t0 = performance.now(), r = v3d.computeDiff(0.10);

@@ -19,7 +19,7 @@ void main(){
   float v = aInt;                                   // 0: Intensität
   if (uMode == 1) v = aPos.z;                       // 1: Höhe
   else if (uMode == 2) v = length(aPos);            // 2: Entfernung zum Scanner
-  else if (uMode == 4 || uMode == 6) v = aZa;       // 4: Drehwinkel; 6: Abweichung zum anderen Scan [m]
+  else if (uMode == 4 || uMode == 6 || uMode == 7) v = aZa;   // 4: Drehwinkel; 6: Abweichung [m]; 7: Flächenart
   else if (uMode == 5) v = aSrc;                    // 5: Scan-Nummer (überlagerte Scans)
   vVal = (v - uRange.x) / max(uRange.y - uRange.x, 1e-6);
   vCut = (aPos.z < uClip.x || aPos.z > uClip.y) ? 1.0 : 0.0;
@@ -45,6 +45,12 @@ void main(){
   if (vCut > 0.5) discard;
   if (uMode == 3) { gl_FragColor = vec4(0.55, 0.85, 0.65, 1.0); return; }
   if (uMode == 0) { float g = clamp(vVal, 0.05, 1.0); gl_FragColor = vec4(g * 0.5, g, g * 0.7, 1.0); return; }
+  if (uMode == 7) {                                 // Flächenart: Objekt, Boden, Decke, Wand, Schräge, waagerecht
+    float k = floor(vVal + 0.5);
+    vec3 c = k < 0.5 ? vec3(0.45, 0.45, 0.45) : k < 1.5 ? vec3(0.25, 0.5, 1.0) : k < 2.5 ? vec3(1.0, 0.85, 0.3)
+           : k < 3.5 ? vec3(0.3, 0.85, 0.45) : k < 4.5 ? vec3(0.95, 0.35, 0.8) : vec3(1.0, 0.55, 0.15);
+    gl_FragColor = vec4(c, 1.0); return;
+  }
   if (uMode == 5) {                                 // feste, gut unterscheidbare Farben je Scan
     float k = mod(floor(vVal + 0.5), 6.0);
     vec3 c = k < 0.5 ? vec3(1.0, 0.6, 0.1) : k < 1.5 ? vec3(0.2, 0.8, 1.0) : k < 2.5 ? vec3(0.95, 0.3, 0.8)
@@ -350,11 +356,12 @@ class Viewer3D {
 
   // --- Farbe / Schnitt -----------------------------------------------------
   setColorMode(m) {
-    const was = this.colorMode === 6, now = m === 6;
-    if (was !== now) {                                  // Puffer umschalten: Drehwinkel <-> Abweichung
+    const srcOf = k => k === 6 ? 'diff' : k === 7 ? 'cls' : 'za';
+    const was = srcOf(this.colorMode), now = srcOf(m);
+    if (was !== now) {                                  // Puffer umschalten: Drehwinkel / Abweichung / Flächenart
       const gl = this.gl;
       for (const c of this.chunks) {
-        const data = now ? (c.diff || new Float32Array(c.count)) : c.za;
+        const data = c[now] || new Float32Array(c.count);
         gl.bindBuffer(gl.ARRAY_BUFFER, c.zaBuf); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
       }
     }
@@ -411,17 +418,22 @@ class Viewer3D {
     if (this.colorMode === 1) return [Math.max(b.min[2], this.clip[0]), Math.min(b.max[2], this.clip[1])];
     if (this.colorMode === 4) return [0, Math.max(this.zaMax, 1)];
     if (this.colorMode === 6) return [0, this.diffMax || 0.1];
+    if (this.colorMode === 7) return [0, 1];
     if (this.colorMode === 5) return [0, 1];                      // Shader nutzt die Nummer direkt
     return [0, Math.min(Math.sqrt(b.rmax), 10)];
   }
 
   _updateLegend() {
     if (!this._legendEl) return;
-    const names = ['Intensität', 'Höhe [m]', 'Entfernung [m]', 'einfarbig', 'Drehwinkel [°]', 'Scan Nr.', 'Abweichung [m]'];
+    const names = ['Intensität', 'Höhe [m]', 'Entfernung [m]', 'einfarbig', 'Drehwinkel [°]', 'Scan Nr.', 'Abweichung [m]', 'Flächen'];
     const r = this._range();
     const fmt = v => (this.colorMode === 0 || this.colorMode === 4 || this.colorMode === 5) ? v.toFixed(0) : v.toFixed(2);
     const pal = ['#ff9a1a', '#33ccff', '#f24dcc', '#99f24d', '#f2f2f2', '#6673ff'];
-    if (this.colorMode === 5) {
+    if (this.colorMode === 7) {
+      const cp = ['#737373', '#4080ff', '#ffd94d', '#4dd973', '#f259cc', '#ff8c26'];
+      const cn = ['Objekt', 'Boden', 'Decke', 'Wand', 'Schräge', 'waagerecht'];
+      this._legendEl.innerHTML = cn.map((n, k) => `<span style="color:${cp[k]}">&#9632; ${n}</span>`).join(' ');
+    } else if (this.colorMode === 5) {
       this._legendEl.innerHTML = `<span>${names[5]}</span> ` + Array.from({ length: this.nSources }, (_, k) =>
         `<span style="color:${pal[k % 6]}">&#9632; ${k}</span>`).join(' ');
     } else this._legendEl.innerHTML = this.colorMode === 3 || this.colorMode === 0 ? `<span>${names[this.colorMode]}</span>`
