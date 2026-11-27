@@ -90,6 +90,8 @@ Fläche, Höhe; DXF (Schichten WAENDE, SCANPUNKTE, MASSE; Meter) und SVG 1:10.
 
 **Schnittansicht** (`frontend/js/section.js`): senkrechter Schnitt durch einen Punkt in wählbarer Richtung
 und Dicke (auch aus zwei Messpunkten oder an den Wänden ausgerichtet), Export DXF (Schicht SCHNITT), SVG 1:10, PNG.
+**Flächen** (Farbmodus, `frontend/js/surfaces.js`): Boden, Decke, Wände, Schrägen und waagerechte Flächen je
+10-cm-Würfel erkannt, gesehene Fläche je Art in m².
 **Abweichung zwischen Scans** (Farbmodus): Abstand jedes Punkts zum jeweils anderen geladenen Scan, 0–10 cm.
 
 **Mehrere Scans** (`frontend/js/registration.js`, eigener Worker): weitere Scans mit „+“ dazuladen,
