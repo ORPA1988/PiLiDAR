@@ -93,7 +93,8 @@ Fläche, Höhe; DXF (Schichten WAENDE, SCANPUNKTE, MASSE; Meter) und SVG 1:10.
 Wandzellen, FFT-Kreuzkorrelation für alle Drehwinkel (2°); fein: ICP mit Fangradius 0,5 → 0,08 m.
 Güte: Überdeckung (Punkte mit Nachbar < 10 cm) und Abweichung. Als **Projekt** auf dem Pi speichern
 (`/api/projects`, Datei `projects/<name>.json`: Scan-IDs + Lage); Export und Grundriss nutzen die
-ausgerichtete Wolke, der Grundriss zeigt alle Scannerstandorte.
+ausgerichtete Wolke, der Grundriss zeigt alle Scannerstandorte. **Von Hand:** Scan wählen, mit
+Pfeilen/Drehknöpfen (1 cm/0,5° bis 20 cm/10°) oder Zahlen verschieben, dann „Feinausrichten ab hier“.
 
 **Bedienfehler** kommen als HTTP 409 mit `{"error": "…"}` und erscheinen unten rechts.
 
