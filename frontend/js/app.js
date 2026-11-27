@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127u';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127v';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -38,6 +38,7 @@ let viewMode = '2d';
 let totalPoints = 0;
 let lidarResDeg = 0;
 let lastState = null;  // für das automatische Nachladen der Scan-Liste
+const edgeFilterOn = () => { const e = document.getElementById('edgeChk'); return !!(e && e.checked); };
 let loadedScans = [];   // überlagerte Scans (Index = src = Farbe im Modus „Scan-Nummer“)
 let poses = [];         // Lage je Scan: {yaw [rad], tx, ty, tz [m]}  p' = Rz(yaw)·p + t
 let alignQ = [];        // Güte der Ausrichtung je Scan {overlap, rmse}
@@ -49,7 +50,7 @@ async function refreshWorkerCfg() {
     const c = await (await rawFetch('/api/config')).json();
     worker.postMessage({ type: 'init', angle_offset: c.LIDAR.ANGLE_OFFSET,
       model_y: c.GEOMETRY.MODEL_Y_OFFSET, model_z: c.GEOMETRY.MODEL_Z_OFFSET,
-      dist_min: c.LIDAR.DISTANCE_MIN_MM, dist_max: c.LIDAR.DISTANCE_MAX_MM });
+      dist_min: c.LIDAR.DISTANCE_MIN_MM, dist_max: c.LIDAR.DISTANCE_MAX_MM, edge_filter: edgeFilterOn() });
   } catch (e) { /* offline – Init kommt mit dem WebSocket */ }
 }
 refreshWorkerCfg();   // vertikale Winkelauflösung [°], live aus Frames gemessen
@@ -78,7 +79,7 @@ worker.onmessage = (ev) => {
       ? `${totalPoints.toLocaleString('de-DE')} (${Math.round(m.progress * 100)} %)`
       : totalPoints.toLocaleString('de-DE');
   } else if (m.type === 'rawDone') {
-    $('stPts').textContent = m.total.toLocaleString('de-DE');
+    $('stPts').textContent = m.total.toLocaleString('de-DE') + (m.edgeRemoved ? ` (${m.edgeRemoved.toLocaleString('de-DE')} Kantenpunkte gefiltert)` : '');
     v3d._flush();
     const w = rawWaiters.get(m.src);
     if (w) { rawWaiters.delete(m.src); w(); }
@@ -200,6 +201,22 @@ $('btnPng').onclick = () => {
 
 // --- 3D-Darstellung ----------------------------------------------------
 $('colorMode').onchange = () => v3d.setColorMode(+$('colorMode').value);
+// Kantenfilter: Einstellung merken, geladene Scans mit gleicher Lage neu rechnen
+try { $('edgeChk').checked = localStorage.getItem('pilidar.edge') === '1'; } catch (e) {}
+$('edgeChk').onchange = async () => {
+  try { localStorage.setItem('pilidar.edge', $('edgeChk').checked ? '1' : '0'); } catch (e) {}
+  worker.postMessage({ type: 'init', edge_filter: edgeFilterOn() });
+  if (!loadedScans.length) return;
+  const ids = loadedScans.slice(), ps = poses.slice(), qs = alignQ.slice(), cm = $('colorMode').value;
+  clearView();
+  for (let k = 0; k < ids.length; k++) {
+    await loadScanInto3D(ids[k], k > 0, true);
+    const p = ps[k];
+    if (p && (p.yaw || p.tx || p.ty || p.tz)) v3d.transformSource(k, p.yaw, p.tx, p.ty, p.tz);
+    poses[k] = p || poses[k]; alignQ[k] = qs[k];
+  }
+  $('colorMode').value = cm; v3d.setColorMode(+cm); showAlignInfo();
+};
 $('ptSize').oninput = () => v3d.setPointSize(+$('ptSize').value);
 function applyClip() {
   const lo = $('clipLo').value === '' ? -1e9 : +$('clipLo').value;

@@ -9,7 +9,8 @@
  */
 'use strict';
 
-let cfg = { angle_offset: 0, model_y: 0, model_z: 0, dist_min: 30, dist_max: 25000 };
+let cfg = { angle_offset: 0, model_y: 0, model_z: 0, dist_min: 30, dist_max: 25000, edge_filter: false };
+let edgeRemoved = 0;   // vom Kantenfilter verworfene Punkte (seit dem letzten Leeren)
 
 let allXYZ = [];   // Float32Array-Blöcke für den Export
 let allINT = [];
@@ -22,6 +23,7 @@ const D2R = Math.PI / 180;
 function transformBlock(z, a, d, it, f0, n) {
   const ao = cfg.angle_offset * D2R, caO = Math.cos(ao), saO = Math.sin(ao);
   const oy = cfg.model_y, oz = cfg.model_z, dmin = cfg.dist_min, dmax = cfg.dist_max;
+  const edge = cfg.edge_filter, N = d.length;
   const xyz = new Float32Array(n * 12 * 3);
   const inten = new Float32Array(n * 12);
   const za = new Float32Array(n * 12);              // Drehwinkel je Punkt (Diagnose-Farbe)
@@ -31,6 +33,13 @@ function transformBlock(z, a, d, it, f0, n) {
     for (let j = f * 12; j < f * 12 + 12; j++) {
       const dd = d[j];
       if (dd < dmin || dd > dmax) continue;
+      // Kantenfilter: Punkt liegt weit weg von BEIDEN Winkel-Nachbarn -> Mischpunkt an einer
+      // Kante („in der Luft“ zwischen Vorder- und Hintergrund) oder Einzelausreißer.
+      if (edge && j > 0 && j < N - 1) {
+        const dp = d[j - 1], dn = d[j + 1], tol = Math.max(30, 0.03 * dd);
+        if (dp >= dmin && dn >= dmin && Math.abs(a[j + 1] - a[j - 1]) < 3 &&
+            Math.abs(dd - dp) > tol && Math.abs(dd - dn) > tol) { edgeRemoved++; continue; }
+      }
       const ang = a[j] * D2R;
       const px0 = dd * Math.cos(ang), pz0 = -dd * Math.sin(ang);   // 270° -> +Z (oben)
       const px = px0 * caO + pz0 * saO;                            // Y-Rotation
@@ -74,6 +83,7 @@ self.onmessage = (ev) => {
   if (msg.type === 'init') {
     for (const k of ['angle_offset', 'model_y', 'model_z', 'dist_min', 'dist_max'])
       if (typeof msg[k] === 'number') cfg[k] = msg[k];
+    if (typeof msg.edge_filter === 'boolean') cfg.edge_filter = msg.edge_filter;
   } else if (msg.type === 'batch') {               // Live: Bündel vom WebSocket
     const r = unpack(msg.buf, true);
     emit(transformBlock(r.z, r.a, r.d, r.it, 0, r.n), {});
@@ -84,9 +94,9 @@ self.onmessage = (ev) => {
       const m = Math.min(STEP, r.n - f);
       emit(transformBlock(r.z, r.a, r.d, r.it, f, m), { progress: (f + m) / r.n, scanId: msg.scanId, src: msg.src || 0 });
     }
-    self.postMessage({ type: 'rawDone', scanId: msg.scanId, src: msg.src || 0, total: totalPoints });
+    self.postMessage({ type: 'rawDone', scanId: msg.scanId, src: msg.src || 0, total: totalPoints, edgeRemoved });
   } else if (msg.type === 'clear') {
-    allXYZ = []; allINT = []; totalPoints = 0;
+    allXYZ = []; allINT = []; totalPoints = 0; edgeRemoved = 0;
   } else if (msg.type === 'export') {
     const xyz = new Float32Array(totalPoints * 3);
     const it = new Float32Array(totalPoints);
