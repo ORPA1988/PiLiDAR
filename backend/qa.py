@@ -59,7 +59,12 @@ def loop_closure_residual(frames, angle_offset, position_offset, dist_min, dist_
 
 def compute_qa(frames, lidar_stats: dict, geom: dict, lidar_cfg: dict,
                scan_angle: float, overlap_deg: float) -> dict:
-    pos = (0.0, geom.get("MODEL_Y_OFFSET", 0.0), geom.get("MODEL_Z_OFFSET", 0.0))
+    # y (Abstand Scan-Ebene <-> Drehachse) bewusst 0: Bei y != 0 tasten Anfangs- und End-Sektor
+    # physikalisch zwei parallele Ebenen im Abstand 2·y ab. Mit y im Modell lägen die Punkte dann
+    # korrekt 2·y auseinander und der Punktabstand wäre immer >= 2·y. Mit y = 0 werden beide in
+    # dieselbe Ebene gelegt; das verschiebt nur quer zur Ebene, die Geometrie IN der Ebene
+    # (Winkel, Schrittverlust) bleibt vergleichbar. y selbst ist so nicht messbar -> von Hand.
+    pos = (0.0, 0.0, geom.get("MODEL_Z_OFFSET", 0.0))
     frames = frames_to_arrays(frames)
     n = len(frames["z_angle"])
     qa = {

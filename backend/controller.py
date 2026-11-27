@@ -432,8 +432,8 @@ class ScanController:
         lc = self.cfg.LIDAR
         geom = self.cfg.GEOMETRY
 
-        def res(a, y, z):
-            v = loop_closure_residual(arr, a, (0.0, y, z), lc["DISTANCE_MIN_MM"], lc["DISTANCE_MAX_MM"],
+        def res(a, y, z):   # y für den Vergleich 0 (nicht messbar, siehe qa.compute_qa)
+            v = loop_closure_residual(arr, a, (0.0, 0.0, z), lc["DISTANCE_MIN_MM"], lc["DISTANCE_MAX_MM"],
                                       scan_angle, overlap, max_pts=20000)
             return None if v is None else round(float(v), 1)
         return {"ok": True, "scan_id": scan_id,

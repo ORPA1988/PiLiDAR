@@ -75,8 +75,9 @@ class CalibrationAborted(Exception):
 
 def calibrate_offset(frames, angle_offset0, position_offset0, dist_min, dist_max,
                      scan_angle, overlap_deg, should_abort=None) -> dict:
-    """Optimiert Achsversatz (Y,Z) + angle_offset so, dass die in der
-    Überlappungszone doppelt erfassten Flächen zusammenfallen."""
+    """Optimiert angle_offset so, dass die in der Überlappungszone doppelt erfassten
+    Flächen zusammenfallen. Achsversatz y und Höhe z sind so nicht bestimmbar (siehe
+    qa.compute_qa) und werden unverändert zurückgegeben – sie kommen aus der Mechanik."""
     if minimize is None or cKDTree is None:
         return {"ok": False, "reason": "scipy nicht verfügbar"}
     arr = frames_to_arrays(frames)
@@ -88,8 +89,8 @@ def calibrate_offset(frames, angle_offset0, position_offset0, dist_min, dist_max
     def residual(params):
         if should_abort is not None and should_abort():
             raise CalibrationAborted()
-        ao, oy, oz = params
-        pos = (0.0, oy, oz)
+        ao = params[0]
+        pos = (0.0, 0.0, position_offset0[2])            # y = 0 für den Vergleich, siehe Docstring
         pa, _ = build_pointcloud(a_sel, ao, pos, dist_min, dist_max)
         pb, _ = build_pointcloud(b_sel, ao, pos, dist_min, dist_max)
         if len(pa) < 5 or len(pb) < 5:
@@ -100,7 +101,7 @@ def calibrate_offset(frames, angle_offset0, position_offset0, dist_min, dist_max
         d, _ = tree.query(pa, k=1)
         return float(np.median(d))
 
-    x0 = [angle_offset0, position_offset0[1], position_offset0[2]]
+    x0 = [angle_offset0]
     try:
         res = minimize(residual, x0, method="Nelder-Mead",
                        options={"xatol": 0.05, "fatol": 0.5, "maxiter": 200})
@@ -109,7 +110,7 @@ def calibrate_offset(frames, angle_offset0, position_offset0, dist_min, dist_max
     return {
         "ok": bool(res.success),
         "angle_offset": float(res.x[0]),
-        "model_y_offset": float(res.x[1]),
-        "model_z_offset": float(res.x[2]),
+        "model_y_offset": float(position_offset0[1]),
+        "model_z_offset": float(position_offset0[2]),
         "residual_mm": float(res.fun),
     }

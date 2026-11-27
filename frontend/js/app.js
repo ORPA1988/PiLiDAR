@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127v';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127w';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -143,9 +143,8 @@ $('btnCalOff').onclick = async () => {
   if (!resp.ok) { $('calOut').textContent = 'nicht gestartet'; return; }
   const r = await resp.json();
   $('calOut').textContent = JSON.stringify(r, null, 1);
-  if (r.ok && confirm(`Offsets übernehmen (Residuum ${r.residual_mm.toFixed(1)} mm)?`))
-    await api('/api/config/apply', { method: 'POST', body: JSON.stringify({
-      angle_offset: r.angle_offset, model_y_offset: r.model_y_offset, model_z_offset: r.model_z_offset }) });
+  if (r.ok && confirm(`Winkel ${r.angle_offset.toFixed(2)}° übernehmen (Rest ${r.residual_mm.toFixed(1)} mm)? y und z bleiben.`))
+    await api('/api/config/apply', { method: 'POST', body: JSON.stringify({ angle_offset: r.angle_offset }) });
   refreshWorkerCfg();
 };
 
@@ -455,10 +454,10 @@ async function calibrateFromScan(scanId) {
   if (!resp.ok) { $('calOut').textContent = 'nicht möglich'; return; }
   const r = await resp.json();
   $('calOut').textContent = JSON.stringify(r, null, 1);
-  if (r.ok && confirm(`Aus Scan ${scanId}: Winkel ${r.angle_offset.toFixed(2)}°, Achsversatz ${r.model_y_offset.toFixed(1)} mm ` +
+  if (r.ok && confirm(`Aus Scan ${scanId}: Winkel ${r.angle_offset.toFixed(2)}° ` +
                       `(Rest ${r.residual_mm.toFixed(1)} mm). Übernehmen? Die Höhe bleibt unverändert.`)) {
     await api('/api/config/apply', { method: 'POST', body: JSON.stringify({
-      angle_offset: r.angle_offset, model_y_offset: r.model_y_offset }) });
+      angle_offset: r.angle_offset }) });
     refreshWorkerCfg();
     toast('Offsets übernommen – gespeicherte Scans werden beim Öffnen neu gerechnet.', 'info');
   }
@@ -667,9 +666,10 @@ $('btnOffCheck').onclick = async () => {
   const r = await api('/api/calibrate/check', { method: 'POST', body: JSON.stringify({ scan_id: id, ...offVals() }) });
   if (!r.ok) { $('offOut').textContent = ''; return; }
   const j = await r.json(), t = j.test.loop_closure_mm, c = j.current.loop_closure_mm;
-  const verdict = t === null ? '' : t <= 15 ? ' – gut' : t <= 30 ? ' – mäßig' : ' – Wände doppelt, Werte passen nicht';
+  const verdict = t === null ? '' : t <= 15 ? ' – Winkel gut' : t <= 30 ? ' – Winkel mäßig' : ' – Winkel passt nicht';
   $('offOut').innerHTML = `Überlappung mit diesen Werten: <b>${t ?? '–'} mm</b>${verdict}<br>` +
-    `mit den aktuellen (${(+j.current.angle_offset).toFixed(2)}°, y ${(+j.current.model_y_offset).toFixed(1)} mm): ${c ?? '–'} mm`;
+    `mit dem aktuellen Winkel (${(+j.current.angle_offset).toFixed(2)}°): ${c ?? '–'} mm<br>` +
+    'y und z lassen sich so nicht prüfen (Mechanik messen: y = Abstand Scan-Ebene – Drehachse).';
 };
 $('btnOffApply').onclick = async () => {
   const v = offVals();

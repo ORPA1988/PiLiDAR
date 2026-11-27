@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>PiLiDAR 2.0</title>
-  <link rel="stylesheet" href="css/style.css?v=20261127v" />
+  <link rel="stylesheet" href="css/style.css?v=20261127w" />
 </head>
 <body>
   <header>
@@ -70,7 +70,7 @@
           <summary>Offsets von Hand</summary>
           <div class="hint">Winkel = Drehung des LiDAR in seiner Ebene. y = Abstand der Scan-Ebene von der
             <b>Abtriebsachse</b> (um die sich der LiDAR dreht), quer zur Ebene. z = Höhe des LiDAR-Zentrums
-            über dem Nullpunkt (nur Verschiebung der Wolke). Einen x-Versatz in der Ebene erkennt die Prüfung ebenfalls als Doppelwand.</div>
+            über dem Nullpunkt (nur Verschiebung der Wolke). y und z am Aufbau messen – die Prüfung am Scan bewertet nur den Winkel.</div>
           <label>Winkel <input id="offAng" type="number" step="0.01" style="width:80px" /> °</label>
           <label>y <input id="offY" type="number" step="0.5" style="width:70px" /> mm</label>
           <label>z <input id="offZ" type="number" step="1" style="width:70px" /> mm</label>
@@ -229,11 +229,11 @@
     </section>
   </main>
 
-  <script src="js/viewer2d.js?v=20261127v"></script>
-  <script src="js/viewer3d.js?v=20261127v"></script>
-  <script src="js/export.js?v=20261127v"></script>
-  <script src="js/floorplan.js?v=20261127v"></script>
-  <script src="js/registration.js?v=20261127v"></script>
-  <script src="js/app.js?v=20261127v"></script>
+  <script src="js/viewer2d.js?v=20261127w"></script>
+  <script src="js/viewer3d.js?v=20261127w"></script>
+  <script src="js/export.js?v=20261127w"></script>
+  <script src="js/floorplan.js?v=20261127w"></script>
+  <script src="js/registration.js?v=20261127w"></script>
+  <script src="js/app.js?v=20261127w"></script>
 </body>
 </html>
