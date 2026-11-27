@@ -43,6 +43,32 @@ const FloorPlan = (() => {
     return pts;
   }
 
+  /* Senkrechte Flächen: Zellen, die in mindestens `need` von `n` Teilstreifen belegt sind
+   * (±1 Zelle Toleranz). Dachschrägen, Tischplatten und niedrige Möbel fallen heraus. */
+  function verticalCells(chunks, zLo, zHi, cell, n = 4, need = 3, minHits = 2) {
+    const h = (zHi - zLo) / n, layers = [];
+    for (let k = 0; k < n; k++) {
+      const set = new Set();
+      for (const p of occupancy(chunks, zLo + k * h, zLo + (k + 1) * h, cell, minHits))
+        set.add(Math.floor(p[0] / cell) + ',' + Math.floor(p[1] / cell));
+      layers.push(set);
+    }
+    const all = new Set(); for (const L of layers) for (const k of L) all.add(k);
+    const pts = [];
+    for (const key of all) {
+      const [gx, gy] = key.split(',').map(Number);
+      let cnt = 0;
+      for (const L of layers) {
+        let hit = false;
+        for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++)
+          if (L.has((gx + dx) + ',' + (gy + dy))) hit = true;
+        if (hit) cnt++;
+      }
+      if (cnt >= need) pts.push([(gx + 0.5) * cell, (gy + 0.5) * cell]);
+    }
+    return pts;
+  }
+
   /* RANSAC: wiederholt die Gerade mit den meisten Punkten (Abstand < tol) suchen */
   function ransacLines(pts, { tol = 0.03, minPts = 40, maxLines = 40, iters = 600 } = {}) {
     let rest = pts.slice();
@@ -138,10 +164,11 @@ const FloorPlan = (() => {
     const chunks = viewer.chunks, bbox = viewer.bbox;
     if (!chunks.length || !bbox) throw new Error('Keine Punktwolke geladen');
     const ceiling = estimateCeiling(chunks, bbox);
-    const zHi = opts.zHi ?? ceiling - 0.12;
-    const zLo = opts.zLo ?? ceiling - 0.60;
+    // Standard: von knapp über Scannerhöhe bis knapp unter die Decke, nur senkrechte Flächen
+    const zHi = opts.zHi ?? ceiling - 0.15;
+    const zLo = opts.zLo ?? Math.min(0.10, zHi - 0.4);
     const cell = opts.cell ?? 0.02;
-    const occ = occupancy(chunks, zLo, zHi, cell, opts.minHits ?? 3);
+    const occ = verticalCells(chunks, zLo, zHi, cell);
     let lines = mergeLines(ransacLines(occ, { tol: cell * 1.5 }));
     if (opts.orthogonal !== false) lines = orthogonalize(lines);
     const segs = segments(lines);

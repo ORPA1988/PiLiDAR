@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127f';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127g';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -201,7 +201,7 @@ function floorCompute(opts) {
     $('floorLo').value = floorRes.zLo.toFixed(2); $('floorHi').value = floorRes.zHi.toFixed(2);
     $('floorInfo').textContent = `Decke bei ${floorRes.ceiling.toFixed(2)} m · Streifen ${floorRes.zLo.toFixed(2)}…${floorRes.zHi.toFixed(2)} m · ` +
       `${floorRes.segs.length} Wandstücke, ${floorRes.wallLength.toFixed(1)} m Wandlänge · ${Math.round(performance.now() - t0)} ms. ` +
-      `Roter Punkt = Scannerstandort. Nur Wände im Sichtfeld des Scanners.`;
+      `Nur senkrechte Flächen (Dachschrägen/Möbel ausgefiltert). Roter Punkt = Scannerstandort.`;
   } catch (e) { toast('Grundriss: ' + e.message); }
 }
 $('btnFloor').onclick = () => {
