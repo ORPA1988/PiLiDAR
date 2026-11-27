@@ -167,8 +167,11 @@ const FloorPlan = (() => {
     for (const c of chunks) for (let i = 2; i < c.pos.length; i += 3) {
       const z = c.pos[i]; if (z <= hi) { h[Math.min(n - 1, Math.floor((z - lo) / bin))]++; tot++; }
     }
-    let best = 0; for (let i = 1; i < n; i++) if (h[i] > h[best]) best = i;
-    return h[best] > Math.max(2000, tot * 0.02) ? lo + (best + 0.5) * bin : null;
+    // tiefste deutliche Fläche (nicht die dichteste – das wäre oft die Tischplatte)
+    let max = 0; for (let i = 0; i < n; i++) if (h[i] > max) max = h[i];
+    const need = Math.max(1500, max * 0.25);
+    for (let i = 0; i < n; i++) if (h[i] >= need) return lo + (i + 0.5) * bin;
+    return null;
   }
 
   /* Raummaße entlang der Hauptrichtungen, Fläche (Flutfüllung vom Scanner aus), Raumhöhe */
@@ -251,7 +254,7 @@ const FloorPlan = (() => {
     const m = res.m || {}, t = [];
     if (m.lengthA) t.push(`Raum ca. ${Math.max(m.lengthA, m.lengthB).toFixed(2)} × ${Math.min(m.lengthA, m.lengthB).toFixed(2)} m`);
     if (m.area) t.push(`Fläche ${m.areaOpen ? '≥ ' : 'ca. '}${m.area.toFixed(1)} m²${m.areaOpen ? ' (Raum nicht geschlossen)' : ''}`);
-    t.push(m.height ? `Raumhöhe ca. ${m.height.toFixed(2)} m` : 'Raumhöhe: Boden nicht sichtbar');
+    t.push(m.height ? `Raumhöhe (tiefste Fläche bis Decke) ca. ${m.height.toFixed(2)} m` : 'Raumhöhe: Boden nicht sichtbar');
     return t;
   }
 
