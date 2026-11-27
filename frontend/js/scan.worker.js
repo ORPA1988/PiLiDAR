@@ -27,7 +27,7 @@ function transformBlock(z, a, d, it, f0, n) {
   const za = new Float32Array(n * 12);              // Drehwinkel je Punkt (Diagnose-Farbe)
   let k = 0;
   for (let f = f0; f < f0 + n; f++) {
-    const za = -z[f] * D2R, cz = Math.cos(za), sz = Math.sin(za);
+    const zr = -z[f] * D2R, cz = Math.cos(zr), sz = Math.sin(zr);
     for (let j = f * 12; j < f * 12 + 12; j++) {
       const dd = d[j];
       if (dd < dmin || dd > dmax) continue;
