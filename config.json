@@ -4,7 +4,7 @@
     "PORT": "/dev/serial/by-id/usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_ba99d9a1b26eef11b05bbd7dc169b110-if00-port0",
     "BAUDRATE": 921600,
     "MOTOR_CONTROL": false,
-    "ANGLE_OFFSET": 178.95,
+    "ANGLE_OFFSET": 179.27,
     "DISTANCE_MIN_MM": 30,
     "DISTANCE_MAX_MM": 25000
   },
@@ -44,7 +44,7 @@
   },
 
   "GEOMETRY": {
-    "MODEL_Y_OFFSET": -37.5,
+    "MODEL_Y_OFFSET": 0.0,
     "MODEL_Z_OFFSET": -41.9,
     "UP_VECTOR": [0, 0, 1]
   },
