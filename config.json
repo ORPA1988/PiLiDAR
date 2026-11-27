@@ -45,7 +45,7 @@
 
   "GEOMETRY": {
     "MODEL_Y_OFFSET": 0.0,
-    "MODEL_Z_OFFSET": -41.9,
+    "MODEL_Z_OFFSET": 0.0,
     "UP_VECTOR": [0, 0, 1]
   },
 
