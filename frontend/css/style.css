@@ -177,3 +177,21 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .toast { padding: 8px 12px; border-radius: 6px; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
 .toast.error { background: #3a1715; color: #ffb4ab; }
 .toast.info { background: #16341f; color: #b7f5c4; }
+
+/* 3D-Darstellung, Messen, Grundriss */
+.btnrow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.hint { font-size: 11px; color: var(--muted); }
+button.active { outline: 2px solid var(--warn); }
+.v3d-measure { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: rgba(0,0,0,.7);
+  color: #ffd84d; padding: 4px 10px; border-radius: 6px; font: 13px/1.3 system-ui, sans-serif; display: none; }
+.v3d-legend { position: absolute; right: 10px; bottom: 10px; font: 11px/1.2 system-ui, sans-serif; color: var(--muted);
+  text-shadow: 0 0 3px #000; display: grid; grid-template-columns: auto auto; gap: 2px 8px; width: 170px; }
+.v3d-legend > span:first-child { grid-column: 1 / 3; }
+.v3d-legend .bar { grid-column: 1 / 3; height: 8px; border-radius: 4px;
+  background: linear-gradient(90deg, #30123b, #4686fb, #1ae4b6, #a2fc3c, #fabb39, #e4460a, #7a0403); }
+.v3d-legend .hi { text-align: right; }
+.dialog { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 40; }
+.dialog-box { background: var(--panel, #12161c); padding: 14px; border-radius: 10px; display: flex; flex-direction: column; gap: 8px;
+  max-width: 95vw; max-height: 95vh; overflow: auto; }
+.dialog-head { display: flex; justify-content: space-between; align-items: center; }
+#floorCanvas { background: #fff; border-radius: 6px; max-width: 100%; }

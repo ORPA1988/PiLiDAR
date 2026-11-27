@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127c';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127d';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -161,7 +161,59 @@ function clearView() {
   totalPoints = 0; $('stPts').textContent = '0';
 }
 $('btnClear').onclick = clearView;
-$('btnPly').onclick = () => worker.postMessage({ type: 'export' });
+// PLY: sichtbare Punkte (Höhenschnitt beachtet) direkt aus dem Viewer
+$('btnPly').onclick = () => {
+  const v = v3d.visiblePoints();
+  if (!v.total) { toast('Keine Punkte in der 3D-Ansicht.'); return; }
+  exportPLY(v.xyz, v.inten, v.total);
+};
+
+// --- 3D-Darstellung ----------------------------------------------------
+$('colorMode').onchange = () => v3d.setColorMode(+$('colorMode').value);
+$('ptSize').oninput = () => v3d.setPointSize(+$('ptSize').value);
+function applyClip() {
+  const lo = $('clipLo').value === '' ? -1e9 : +$('clipLo').value;
+  const hi = $('clipHi').value === '' ? 1e9 : +$('clipHi').value;
+  v3d.setClip(lo, hi);
+}
+$('clipLo').oninput = applyClip; $('clipHi').oninput = applyClip;
+$('btnClipReset').onclick = () => { $('clipLo').value = ''; $('clipHi').value = ''; applyClip(); };
+$('btnNoCeiling').onclick = () => {
+  const c = FloorPlan.estimateCeiling(v3d.chunks, v3d.bbox);
+  if (c === null) { toast('Keine Punktwolke geladen.'); return; }
+  $('clipHi').value = (c - 0.10).toFixed(2); applyClip();
+  toast(`Decke bei ${c.toFixed(2)} m ausgeblendet.`, 'info');
+};
+document.querySelectorAll('.view-btn').forEach(b => b.onclick = () => v3d.setView(b.dataset.view));
+$('btnMeasure').onclick = () => {
+  const on = !v3d.measuring; v3d.setMeasuring(on);
+  $('btnMeasure').classList.toggle('active', on);
+  if (on) toast('Messen: zwei Punkte in der 3D-Ansicht anklicken.', 'info');
+};
+
+// --- Grundriss -----------------------------------------------------------
+let floorRes = null;
+function floorCompute(opts) {
+  try {
+    const t0 = performance.now();
+    floorRes = FloorPlan.compute(v3d, opts);
+    FloorPlan.draw($('floorCanvas'), floorRes);
+    $('floorLo').value = floorRes.zLo.toFixed(2); $('floorHi').value = floorRes.zHi.toFixed(2);
+    $('floorInfo').textContent = `Decke bei ${floorRes.ceiling.toFixed(2)} m · Streifen ${floorRes.zLo.toFixed(2)}…${floorRes.zHi.toFixed(2)} m · ` +
+      `${floorRes.segs.length} Wandstücke, ${floorRes.wallLength.toFixed(1)} m Wandlänge · ${Math.round(performance.now() - t0)} ms. ` +
+      `Roter Punkt = Scannerstandort. Nur Wände im Sichtfeld des Scanners.`;
+  } catch (e) { toast('Grundriss: ' + e.message); }
+}
+$('btnFloor').onclick = () => {
+  if (!v3d.total) { toast('Erst einen Scan in 3D laden.'); return; }
+  $('floorDlg').classList.remove('hidden'); floorCompute({});
+};
+$('floorClose').onclick = () => $('floorDlg').classList.add('hidden');
+$('floorRedo').onclick = () => floorCompute({ zLo: +$('floorLo').value, zHi: +$('floorHi').value });
+const floorName = ext => `grundriss_${(currentScanId || 'live')}.${ext}`;
+$('floorDxf').onclick = () => floorRes && FloorPlan.download(floorName('dxf'), FloorPlan.toDXF(floorRes, false), 'application/dxf');
+$('floorDxfPts').onclick = () => floorRes && FloorPlan.download(floorName('dxf'), FloorPlan.toDXF(floorRes, true), 'application/dxf');
+$('floorSvg').onclick = () => floorRes && FloorPlan.download(floorName('svg'), FloorPlan.toSVG(floorRes), 'image/svg+xml');
 
 // --- System-Steuerung -------------------------------------------------
 $('btnReboot').onclick = () => {
@@ -285,7 +337,9 @@ async function refreshScans() {
   });
 }
 // Gespeicherten Scan in die 3D-Ansicht laden
+let currentScanId = null;   // zuletzt in 3D geladener Scan (für Dateinamen)
 async function loadScanInto3D(scanId) {
+  currentScanId = scanId;
   clearView();
   // auf 3D-Ansicht umschalten
   const radio3d = document.querySelector('input[name="view"][value="3d"]');
