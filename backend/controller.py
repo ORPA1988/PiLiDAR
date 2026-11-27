@@ -193,13 +193,18 @@ class ScanController:
 
     def start_scan(self, mode: str = "B", name: str = "", scan_angle: float | None = None,
                    overlap_deg: float | None = None, steps_per_measure: int | None = None,
-                   max_packages: int | None = None) -> str:
+                   max_packages: int | None = None, start_deg: float | None = None) -> str:
         """scan_angle/overlap_deg: nur für diesen Scan (Modus B), z. B. 210/30 für Prüfscans."""
         if self.state not in (STATE_IDLE, STATE_LIDAR_ONLY):
             raise RuntimeError(f"Beschäftigt: {self.state}")
         self._check_position()
+        # Sektor-Scan (Modus B): erst auf start_deg fahren (auch negativ), dann bis scan_angle messen
+        self._start_deg = None if start_deg is None else float(start_deg)
+        if self._start_deg is not None and not -30.0 <= self._start_deg < 360.0:
+            raise RuntimeError("Startwinkel außerhalb −30…360°")
         sa = float(scan_angle) if scan_angle is not None else float(self.cfg.MODE_B_CONTINUOUS["SCAN_ANGLE"])
-        if not 10.0 <= sa <= self.MAX_SCAN_ANGLE:
+        lo = 10.0 if self._start_deg is None else self._start_deg + 2.0
+        if not lo <= sa <= self.MAX_SCAN_ANGLE:
             raise RuntimeError(f"Scanwinkel {sa}° außerhalb 10…{self.MAX_SCAN_ANGLE:.0f}°")
         ov = float(overlap_deg) if overlap_deg is not None else (
             max(0.0, sa - 180.0) if scan_angle is not None else float(self.cfg.MODE_B_CONTINUOUS["OVERLAP_DEG"]))
@@ -225,6 +230,11 @@ class ScanController:
     def _run_scan(self, mode: str, scan_id: str) -> None:
         t0 = time.time()
         self.stepper.home()  # sicher in Ausgangsposition starten
+        sd = getattr(self, "_start_deg", None)
+        if sd is not None and mode.upper() != "A":
+            # 3° vor den Start und in Messrichtung wieder heran: Getriebespiel liegt dann an
+            self.stepper.move_angle(sd - 3.0)
+            self.stepper.move_angle(3.0)
         self.lidar.start()
         time.sleep(0.3)       # LiDAR-Drehzahl stabilisieren
         self._recording = True

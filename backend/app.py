@@ -120,7 +120,8 @@ async def api_scan_start(payload: dict | None = None):
                                     scan_angle=None if sa is None else float(sa),
                                     overlap_deg=None if ov is None else float(ov),
                                     steps_per_measure=payload.get("steps_per_measure"),
-                                    max_packages=payload.get("max_packages"))
+                                    max_packages=payload.get("max_packages"),
+                                    start_deg=payload.get("start_deg"))
     return {"ok": True, "scan_id": scan_id}
 
 
