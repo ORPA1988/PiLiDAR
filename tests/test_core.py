@@ -222,6 +222,10 @@ def test_mock_scan():
             raise AssertionError(f"Name {bad!r} angenommen")
     ctrl.store.delete_project("Test Projekt")
     assert ctrl.store.load_project("Test Projekt") is None
+    try:   # Mock-Scan hat nur 20° -> keine Überlappung -> klare Fehlermeldung
+        ctrl.check_offsets(sid, 180.0, 0.0, 0.0)
+    except RuntimeError:
+        pass
     st = ctrl.selftest()
     assert st["status"] in ("ok", "warn", "error") and len(st["checks"]) >= 5, st
     assert any("size_mb" in m for m in ctrl.store.list_scans())

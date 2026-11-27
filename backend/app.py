@@ -158,6 +158,15 @@ async def api_cal_offset_from_scan(payload: dict = Body(...)):
     return await asyncio.to_thread(controller.offset_from_scan, str(payload.get("scan_id", "")))
 
 
+@app.post("/api/calibrate/check")
+async def api_cal_check(payload: dict = Body(...)):
+    """Von Hand gewählte Offsets an einem gespeicherten Scan prüfen (nichts wird gespeichert)."""
+    return await asyncio.to_thread(controller.check_offsets, str(payload.get("scan_id", "")),
+                                   float(payload.get("angle_offset", 0.0)),
+                                   float(payload.get("model_y_offset", 0.0)),
+                                   float(payload.get("model_z_offset", 0.0)))
+
+
 @app.post("/api/stepper/confirm_home")
 async def api_confirm_home():
     """Benutzer bestätigt: Drehkopf steht in der Ausgangslage (Position = 0)."""

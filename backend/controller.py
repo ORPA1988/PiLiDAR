@@ -417,6 +417,32 @@ class ScanController:
                 worst = "warn"
         return {"status": worst, "checks": checks}
 
+    def check_offsets(self, scan_id: str, angle_offset: float, y_mm: float, z_mm: float = 0.0) -> dict:
+        """Überlappung (Abstand Anfang/Ende des Scans, mm) für frei gewählte Offsets –
+        zum Prüfen von Hand eingegebener Werte, ohne Motor/LiDAR, ohne zu speichern."""
+        from .qa import loop_closure_residual
+        arr = self.store.load_raw_arrays(scan_id)
+        if arr is None:
+            raise RuntimeError(f"Keine Rohdaten für Scan {scan_id}")
+        meta = next((m for m in self.store.list_scans() if m.get("id") == scan_id), {})
+        scan_angle = float(meta.get("scan_angle") or self.cfg.MODE_B_CONTINUOUS["SCAN_ANGLE"])
+        overlap = float(meta.get("overlap_deg") or self.cfg.MODE_B_CONTINUOUS["OVERLAP_DEG"])
+        if scan_angle < 180.0 + overlap - 1e-6 or overlap <= 0:
+            raise RuntimeError("Scan hat keine Überlappung (Modus B mit > 180° nötig)")
+        lc = self.cfg.LIDAR
+        geom = self.cfg.GEOMETRY
+
+        def res(a, y, z):
+            v = loop_closure_residual(arr, a, (0.0, y, z), lc["DISTANCE_MIN_MM"], lc["DISTANCE_MAX_MM"],
+                                      scan_angle, overlap, max_pts=20000)
+            return None if v is None else round(float(v), 1)
+        return {"ok": True, "scan_id": scan_id,
+                "test": {"angle_offset": angle_offset, "model_y_offset": y_mm, "model_z_offset": z_mm,
+                         "loop_closure_mm": res(angle_offset, y_mm, z_mm)},
+                "current": {"angle_offset": lc["ANGLE_OFFSET"], "model_y_offset": geom["MODEL_Y_OFFSET"],
+                            "model_z_offset": geom["MODEL_Z_OFFSET"],
+                            "loop_closure_mm": res(lc["ANGLE_OFFSET"], geom["MODEL_Y_OFFSET"], geom["MODEL_Z_OFFSET"])}}
+
     def offset_from_scan(self, scan_id: str) -> dict:
         """Offset-Kalibrierung aus den Rohdaten eines gespeicherten Scans – ohne Motor
         und LiDAR (Modus-B-Scan mit Überlappung nötig)."""

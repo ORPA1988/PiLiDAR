@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127s';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127t';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -617,6 +617,42 @@ $('btnProjDel').onclick = async () => {
   if (r.ok) refreshProjects();
 };
 refreshProjects();
+
+// --- Offsets von Hand ----------------------------------------------------------
+async function fillOffsetBox() {
+  try {
+    const c = await (await rawFetch('/api/config')).json();
+    $('offAng').value = (+c.LIDAR.ANGLE_OFFSET).toFixed(3);
+    $('offY').value = (+c.GEOMETRY.MODEL_Y_OFFSET).toFixed(1);
+    $('offZ').value = (+c.GEOMETRY.MODEL_Z_OFFSET).toFixed(1);
+    const scans = await (await rawFetch('/api/scans')).json();
+    const sel = $('offScan'), cur = sel.value; sel.innerHTML = '';
+    for (const s of scans.filter(s => (s.scan_angle || 0) > 180 || s.mode === 'B')) {
+      const o = document.createElement('option'); o.value = s.id; o.textContent = s.id; sel.appendChild(o);
+    }
+    if (cur) sel.value = cur;
+  } catch (e) { /* offline */ }
+}
+$('offBox').addEventListener('toggle', () => { if ($('offBox').open) fillOffsetBox(); });
+const offVals = () => ({ angle_offset: +$('offAng').value, model_y_offset: +$('offY').value || 0, model_z_offset: +$('offZ').value || 0 });
+$('btnOffCheck').onclick = async () => {
+  const id = $('offScan').value; if (!id) { toast('Kein Scan mit Überlappung vorhanden.'); return; }
+  $('offOut').textContent = 'rechnet …';
+  const r = await api('/api/calibrate/check', { method: 'POST', body: JSON.stringify({ scan_id: id, ...offVals() }) });
+  if (!r.ok) { $('offOut').textContent = ''; return; }
+  const j = await r.json(), t = j.test.loop_closure_mm, c = j.current.loop_closure_mm;
+  const verdict = t === null ? '' : t <= 15 ? ' – gut' : t <= 30 ? ' – mäßig' : ' – Wände doppelt, Werte passen nicht';
+  $('offOut').innerHTML = `Überlappung mit diesen Werten: <b>${t ?? '–'} mm</b>${verdict}<br>` +
+    `mit den aktuellen (${(+j.current.angle_offset).toFixed(2)}°, y ${(+j.current.model_y_offset).toFixed(1)} mm): ${c ?? '–'} mm`;
+};
+$('btnOffApply').onclick = async () => {
+  const v = offVals();
+  if (!isFinite(v.angle_offset)) { toast('Winkel fehlt.'); return; }
+  if (!confirm(`Offsets übernehmen? Winkel ${v.angle_offset}°, y ${v.model_y_offset} mm, z ${v.model_z_offset} mm.\n` +
+               'Gespeicherte Scans werden beim nächsten Öffnen damit gerechnet.')) return;
+  const r = await api('/api/config/apply', { method: 'POST', body: JSON.stringify(v) });
+  if (r.ok) { await refreshWorkerCfg(); toast('Offsets übernommen – Scan neu öffnen, um sie zu sehen.', 'info'); }
+};
 
 $('btnRefresh').onclick = refreshScans;
 $('btnConfirmHome').onclick = async () => {
