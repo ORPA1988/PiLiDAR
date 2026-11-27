@@ -30,7 +30,7 @@ async function api(path, opts) {
 
 const v2d = new Viewer2D($('view2d'));
 const v3d = new Viewer3D($('view3d'));
-const ASSET_VERSION = '20261127e';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
+const ASSET_VERSION = '20261127f';  // wie ?v= in index.html – erzwingt neue Skripte nach Updates
 const worker = new Worker(`js/scan.worker.js?v=${ASSET_VERSION}`);
 
 let ws = null;
@@ -206,10 +206,11 @@ function floorCompute(opts) {
 }
 $('btnFloor').onclick = () => {
   if (!v3d.total) { toast('Erst einen Scan in 3D laden.'); return; }
-  $('floorDlg').classList.remove('hidden'); floorCompute({});
+  $('floorDlg').classList.remove('hidden'); floorCompute({ orthogonal: $('floorOrtho').checked });
 };
 $('floorClose').onclick = () => $('floorDlg').classList.add('hidden');
-$('floorRedo').onclick = () => floorCompute({ zLo: +$('floorLo').value, zHi: +$('floorHi').value });
+$('floorRedo').onclick = () => floorCompute({ zLo: +$('floorLo').value, zHi: +$('floorHi').value,
+                                              orthogonal: $('floorOrtho').checked });
 const floorName = ext => `grundriss_${(currentScanId || 'live')}.${ext}`;
 $('floorDxf').onclick = () => floorRes && FloorPlan.download(floorName('dxf'), FloorPlan.toDXF(floorRes, false), 'application/dxf');
 $('floorDxfPts').onclick = () => floorRes && FloorPlan.download(floorName('dxf'), FloorPlan.toDXF(floorRes, true), 'application/dxf');

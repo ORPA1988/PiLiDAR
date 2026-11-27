@@ -80,6 +80,41 @@ const FloorPlan = (() => {
     return lines;
   }
 
+  /* Fast parallele, nahe Geraden (gleiche Wand, z. B. doppelt erfasst) zusammenführen */
+  function mergeLines(lines, { maxAngleDeg = 4, maxDist = 0.08 } = {}) {
+    const out = [];
+    for (const l of lines.sort((a, b) => b.pts.length - a.pts.length)) {
+      const m = out.find(o => {
+        const cosA = Math.abs(o.dx * l.dx + o.dy * l.dy);
+        const dist = Math.abs(-o.dy * (l.mx - o.mx) + o.dx * (l.my - o.my));
+        return cosA > Math.cos(maxAngleDeg * Math.PI / 180) && dist < maxDist;
+      });
+      if (m) m.pts = m.pts.concat(l.pts); else out.push({ ...l });
+    }
+    return out;
+  }
+
+  /* Rechtwinklig ausrichten: Richtungen auf Hauptrichtung bzw. +90° ziehen (Abweichung < tolDeg) */
+  function orthogonalize(lines, tolDeg = 6) {
+    if (!lines.length) return lines;
+    // Hauptrichtung: gewichteter Mittelwert der Winkel modulo 90° (über doppelte Winkel 4θ)
+    let sx = 0, sy = 0;
+    for (const l of lines) { const a = Math.atan2(l.dy, l.dx) * 4; sx += Math.cos(a) * l.pts.length; sy += Math.sin(a) * l.pts.length; }
+    const base = Math.atan2(sy, sx) / 4;
+    for (const l of lines) {
+      const a = Math.atan2(l.dy, l.dx);
+      const k = Math.round((a - base) / (Math.PI / 2)), snapped = base + k * Math.PI / 2;
+      if (Math.abs(a - snapped) < tolDeg * Math.PI / 180) {
+        l.dx = Math.cos(snapped); l.dy = Math.sin(snapped);
+        // Lage neu: mittlerer Normalabstand der Punkte
+        let c = 0; for (const p of l.pts) c += -l.dy * p[0] + l.dx * p[1]; c /= l.pts.length;
+        const mc = -l.dy * l.mx + l.dx * l.my;
+        l.mx += -l.dy * (c - mc); l.my += l.dx * (c - mc);
+      }
+    }
+    return lines;
+  }
+
   /* Punkte einer Geraden in Abschnitte teilen (Lücke > gap trennt), kurze verwerfen */
   function segments(lines, { gap = 0.25, minLen = 0.3 } = {}) {
     const segs = [];
@@ -107,7 +142,8 @@ const FloorPlan = (() => {
     const zLo = opts.zLo ?? ceiling - 0.60;
     const cell = opts.cell ?? 0.02;
     const occ = occupancy(chunks, zLo, zHi, cell, opts.minHits ?? 3);
-    const lines = ransacLines(occ, { tol: cell * 1.5 });
+    let lines = mergeLines(ransacLines(occ, { tol: cell * 1.5 }));
+    if (opts.orthogonal !== false) lines = orthogonalize(lines);
     const segs = segments(lines);
     let length = 0; for (const s of segs) length += Math.hypot(s[2] - s[0], s[3] - s[1]);
     return { segs, occ, zLo, zHi, ceiling, cell, wallLength: length };
